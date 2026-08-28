@@ -1,0 +1,12 @@
+{
+  "Plugin-Class": "me.farmador.animepics.AnimePicsPlugin",
+  "Name": "${project.plugin_name}",
+  "Version": "${project.plugin_version}",
+  "Description": "Displays random anime pictures and GIFs from nekos.life, waifu.im, safebooru, or a local folder (NSFW compatible).",
+  "Authors": [
+    "farmador"
+  ],
+  "Minecraft-Versions": [
+    "${project.minecraft_version}"
+  ]
+}
