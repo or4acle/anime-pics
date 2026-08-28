@@ -25,4 +25,4 @@ No Windows:
 
 O jar fica em `build/libs/`. Coloque em `.minecraft/rusherhack/plugins/` e use `-Drusherhack.enablePlugins=true`.
 
-Minecraft alvo: **1.21.4** (mesmo template do [example-plugin](https://github.com/RusherDevelopment/example-plugin)).
+Minecraft alvo: **1.21.1** (RusherHack **2.0.5**).

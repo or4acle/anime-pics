@@ -8,6 +8,7 @@ plugins {
 version = project.plugin_version
 group = project.maven_group
 archivesBaseName = project.plugin_name
+layout.buildDirectory.set(file("${projectDir}/build"))
 
 configurations {
 	rusherhackApi
