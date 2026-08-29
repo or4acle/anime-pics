@@ -39,14 +39,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AnimePicsModule extends ToggleableModule {
 
-	private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0";
+	private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
+	// Tags 100% NSFW para Waifu.im
 	private static final List<String> WAIFU_NSFW_CYCLE_LIST = Arrays.asList(
 			"ero", "ecchi", "oppai", "hentai", "milf", "ass", "paizuri", "oral"
 	);
 
+	// Tags 100% NSFW para PurrBot
 	private static final List<String> PURRBOT_NSFW_LIST = Arrays.asList(
 			"fuck", "blowjob", "cum", "anal", "pussylick", "solo", "yaoi", "yuri", "neko"
+	);
+
+	// Tags NSFW complementares para injetar e reforçar quando o usuário não especificar tags
+	private static final List<String> DEFAULT_NSFW_BOORU_TAGS = Arrays.asList(
+			"nude", "breasts", "nipples", "pussy", "sex", "panties", "bikini", "lingerie", "cleavage", "ass", "thighs", "ecchi", "swimsuit"
 	);
 
 	private final Random random = new Random();
@@ -54,12 +61,15 @@ public class AnimePicsModule extends ToggleableModule {
 	// Fonte Principal (Somente NSFW & LocalFolder)
 	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.YandeRE);
 
-	// Yande.re Settings (Pesquisa livre de tags: ex. "genshin_impact", "bikini", "thighs", etc.)
+	// Strict NSFW Enforcer
+	private final BooleanSetting strictNSFW = new BooleanSetting("StrictNSFW", true);
+
+	// Yande.re Settings
 	private final StringSetting yandeSearchTags = new StringSetting("YandeSearchTags", "");
 	private final EnumSetting<BooruRating> yandeRating = new EnumSetting<>("YandeRating", BooruRating.Explicit);
 	private final BooleanSetting yandeRandomPage = new BooleanSetting("YandeRandomPage", true);
 
-	// Konachan Settings (Pesquisa livre de tags)
+	// Konachan Settings
 	private final StringSetting konachanSearchTags = new StringSetting("KonachanSearchTags", "");
 	private final EnumSetting<BooruRating> konachanRating = new EnumSetting<>("KonachanRating", BooruRating.Explicit);
 	private final BooleanSetting konachanRandomPage = new BooleanSetting("KonachanRandomPage", true);
@@ -68,7 +78,7 @@ public class AnimePicsModule extends ToggleableModule {
 	private final EnumSetting<PurrBotNsfwTag> purrbotNsfwTag = new EnumSetting<>("PurrNsfwTag", PurrBotNsfwTag.blowjob);
 	private final BooleanSetting cyclePurrbot = new BooleanSetting("CyclePurrBot", true);
 
-	// Waifu.im Settings (Pesquisa por tag customizada ou seletor enum)
+	// Waifu.im Settings
 	private final StringSetting waifuCustomTag = new StringSetting("WaifuCustomTag", "");
 	private final EnumSetting<WaifuNsfwTag> waifuTag = new EnumSetting<>("WaifuTag", WaifuNsfwTag.ero);
 	private final BooleanSetting cycleWaifu = new BooleanSetting("CycleWaifu", true);
@@ -88,9 +98,9 @@ public class AnimePicsModule extends ToggleableModule {
 	private final BooleanSetting enableWebhook = new BooleanSetting("EnableWebhook", false);
 	private final StringSetting webhookUrl = new StringSetting("WebhookUrl", "");
 
-	// GIF Settings
+	// GIF Settings (com otimização anti-lag)
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
-	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 150, 2, 500);
+	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 60, 2, 300);
 
 	// Rastreamento para recarregamento instantâneo
 	private Source lastSource = null;
@@ -142,6 +152,7 @@ public class AnimePicsModule extends ToggleableModule {
 
 		this.registerSettings(
 				this.source,
+				this.strictNSFW,
 				// Yande.re Tag Search & Ratings
 				this.yandeSearchTags,
 				this.yandeRating,
@@ -388,6 +399,10 @@ public class AnimePicsModule extends ToggleableModule {
 		this.enableWebhook.setValue(enabled);
 	}
 
+	public void setStrictNSFW(boolean strict) {
+		this.strictNSFW.setValue(strict);
+	}
+
 	private void loadImage() {
 		if (!this.locked.compareAndSet(false, true)) {
 			return;
@@ -462,6 +477,13 @@ public class AnimePicsModule extends ToggleableModule {
 				}
 			}
 		}
+
+		// Se StrictNSFW estiver ativo e nenhuma tag de conteúdo foi informada além do rating, injeta uma tag spicy aleatória
+		if (this.strictNSFW.getValue() && (userTags == null || userTags.trim().isEmpty())) {
+			String spicyTag = DEFAULT_NSFW_BOORU_TAGS.get(this.random.nextInt(DEFAULT_NSFW_BOORU_TAGS.size()));
+			parts.add(URLEncoder.encode(spicyTag, StandardCharsets.UTF_8));
+		}
+
 		return String.join("+", parts);
 	}
 
@@ -472,9 +494,9 @@ public class AnimePicsModule extends ToggleableModule {
 					String tagQuery = buildBooruTagQuery(this.yandeSearchTags.getValue(), this.yandeRating.getValue().param);
 					int page = this.yandeRandomPage.getValue() ? (this.random.nextInt(35) + 1) : 1;
 
-					JsonObject chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, page);
+					JsonObject chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, page, this.strictNSFW.getValue());
 					if (chosen == null && page != 1) {
-						chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, 1);
+						chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, 1, this.strictNSFW.getValue());
 					}
 
 					if (chosen != null) {
@@ -497,7 +519,8 @@ public class AnimePicsModule extends ToggleableModule {
 								meta.sourceOrigin = chosen.get("source").getAsString();
 							}
 							if (chosen.has("rating")) {
-								meta.rating = chosen.get("rating").getAsString();
+								String r = chosen.get("rating").getAsString();
+								meta.rating = r.equalsIgnoreCase("e") ? "Explicit (NSFW)" : (r.equalsIgnoreCase("q") ? "Questionable (Ecchi)" : "Safe");
 							}
 							if (chosen.has("width")) {
 								meta.width = chosen.get("width").getAsInt();
@@ -519,9 +542,9 @@ public class AnimePicsModule extends ToggleableModule {
 					String tagQuery = buildBooruTagQuery(this.konachanSearchTags.getValue(), this.konachanRating.getValue().param);
 					int page = this.konachanRandomPage.getValue() ? (this.random.nextInt(35) + 1) : 1;
 
-					JsonObject chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, page);
+					JsonObject chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, page, this.strictNSFW.getValue());
 					if (chosen == null && page != 1) {
-						chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, 1);
+						chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, 1, this.strictNSFW.getValue());
 					}
 
 					if (chosen != null) {
@@ -544,7 +567,8 @@ public class AnimePicsModule extends ToggleableModule {
 								meta.sourceOrigin = chosen.get("source").getAsString();
 							}
 							if (chosen.has("rating")) {
-								meta.rating = chosen.get("rating").getAsString();
+								String r = chosen.get("rating").getAsString();
+								meta.rating = r.equalsIgnoreCase("e") ? "Explicit (NSFW)" : (r.equalsIgnoreCase("q") ? "Questionable (Ecchi)" : "Safe");
 							}
 							if (chosen.has("width")) {
 								meta.width = chosen.get("width").getAsInt();
@@ -580,8 +604,8 @@ public class AnimePicsModule extends ToggleableModule {
 					if (pRes.has("link") && !pRes.get("link").isJsonNull()) {
 						String gifUrl = pRes.get("link").getAsString();
 						ImageMetadata meta = new ImageMetadata(gifUrl, "PurrBot.site");
-						meta.rating = "NSFW / GIF";
-						meta.tags = List.of(tag, "gif", "purrbot");
+						meta.rating = "Explicit / Hentai GIF";
+						meta.tags = List.of(tag, "nsfw_gif", "purrbot");
 						return meta;
 					}
 					return null;
@@ -615,7 +639,7 @@ public class AnimePicsModule extends ToggleableModule {
 					if (item.has("url") && !item.get("url").isJsonNull()) {
 						String imgUrl = item.get("url").getAsString();
 						ImageMetadata meta = new ImageMetadata(imgUrl, "Waifu.im");
-						meta.rating = "NSFW";
+						meta.rating = "NSFW / Hentai";
 						if (item.has("source") && !item.get("source").isJsonNull()) {
 							meta.sourceOrigin = item.get("source").getAsString();
 						}
@@ -657,9 +681,9 @@ public class AnimePicsModule extends ToggleableModule {
 		return null;
 	}
 
-	private JsonObject fetchBooruPost(String baseUrl, String tagQuery, int page) {
+	private JsonObject fetchBooruPost(String baseUrl, String tagQuery, int page, boolean filterStrictNsfw) {
 		try {
-			String url = baseUrl + "?limit=30&page=" + page;
+			String url = baseUrl + "?limit=50&page=" + page;
 			if (!tagQuery.isEmpty()) {
 				url += "&tags=" + tagQuery;
 			}
@@ -677,7 +701,26 @@ public class AnimePicsModule extends ToggleableModule {
 			if (posts.isEmpty()) {
 				return null;
 			}
-			return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+
+			List<JsonObject> candidates = new ArrayList<>();
+			for (JsonElement el : posts) {
+				if (!el.isJsonObject()) continue;
+				JsonObject p = el.getAsJsonObject();
+				if (filterStrictNsfw) {
+					// Rejeita estritamente posts marcados como safe ("s")
+					if (p.has("rating") && p.get("rating").getAsString().equalsIgnoreCase("s")) {
+						continue;
+					}
+				}
+				candidates.add(p);
+			}
+
+			if (candidates.isEmpty()) {
+				// Fallback caso todos fossem 's'
+				return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+			}
+
+			return candidates.get(this.random.nextInt(candidates.size()));
 		} catch (Exception e) {
 			return null;
 		}

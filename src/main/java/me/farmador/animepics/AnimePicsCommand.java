@@ -8,7 +8,7 @@ import org.rusherhack.core.command.annotations.CommandExecutor;
 public class AnimePicsCommand extends Command {
 
 	public AnimePicsCommand() {
-		super("animepics", "Search tags, change sources, webhook, or skip to next anime picture");
+		super("animepics", "Search tags, change sources, webhook, strict NSFW, or skip to next anime picture");
 	}
 
 	private AnimePicsModule getModule() {
@@ -49,6 +49,27 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
+	 * .animepics testwebhook -> envia um teste imediato para o canal Discord
+	 */
+	@CommandExecutor(subCommand = {"testwebhook", "webhooktest"})
+	private String testWebhook() {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		if (module.getWebhookUrl().trim().isEmpty()) {
+			return "Error: No Webhook URL set! Use .animepics webhook <url>";
+		}
+		ImageMetadata testMeta = new ImageMetadata("https://i.imgur.com/83pL6rX.png", "Webhook Test");
+		testMeta.author = "AnimePics Bot";
+		testMeta.rating = "Explicit / NSFW Test";
+		testMeta.postUrl = "https://github.com";
+		testMeta.tags = java.util.List.of("test", "nsfw", "webhook", "rusherhack");
+		DiscordWebhookSender.send(module.getWebhookUrl().trim(), testMeta);
+		return "Sent test embed to Discord Webhook! Check your Discord channel.";
+	}
+
+	/**
 	 * .animepics webhook <url>
 	 */
 	@CommandExecutor(subCommand = "webhook")
@@ -77,7 +98,23 @@ public class AnimePicsCommand extends Command {
 
 		module.setWebhookUrl(url.trim());
 		module.setWebhookEnabled(true);
-		return "Discord Webhook set and enabled! Arts will be sent to your Discord channel.";
+		return "Discord Webhook set and enabled! You can test it with .animepics testwebhook";
+	}
+
+	/**
+	 * .animepics strict <on/off>
+	 */
+	@CommandExecutor(subCommand = "strict")
+	@CommandExecutor.Argument("state")
+	private String setStrict(String state) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		boolean enabled = state.equalsIgnoreCase("on") || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("1");
+		module.setStrictNSFW(enabled);
+		module.reloadNow();
+		return "Strict NSFW set to: " + enabled;
 	}
 
 	/**
