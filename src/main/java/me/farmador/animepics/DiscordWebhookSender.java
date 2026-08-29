@@ -14,16 +14,23 @@ public class DiscordWebhookSender {
 
 	private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
-	public static void send(String webhookUrl, ImageMetadata meta) {
+	public static void send(String webhookUrl, ImageMetadata meta, boolean debug) {
 		if (webhookUrl == null) return;
 		String cleanUrl = webhookUrl.trim();
 		if (cleanUrl.isEmpty() || !cleanUrl.startsWith("http")) {
+			if (debug) {
+				System.out.println("[AnimePics Debug] Discord Webhook URL is invalid or empty: '" + webhookUrl + "'");
+			}
 			return;
 		}
 
 		new Thread(() -> {
 			HttpURLConnection conn = null;
 			try {
+				if (debug) {
+					System.out.println("[AnimePics Debug] Preparing Discord Webhook embed for post: " + (meta.postUrl != null ? meta.postUrl : meta.url));
+				}
+
 				JsonObject root = new JsonObject();
 				root.addProperty("username", "AnimePics RusherHack");
 				root.addProperty("avatar_url", "https://i.imgur.com/83pL6rX.png");
@@ -36,7 +43,7 @@ public class DiscordWebhookSender {
 					embed.addProperty("url", meta.url);
 				}
 
-				// Cor rosa/roxa sexy para o embed (#FF1493)
+				// Cor rosa sexy para o embed (#FF1493)
 				embed.addProperty("color", 0xFF1493);
 
 				// Imagem em destaque
@@ -51,7 +58,7 @@ public class DiscordWebhookSender {
 				// Campo: Site / Fonte
 				JsonObject siteField = new JsonObject();
 				siteField.addProperty("name", "🌐 Source");
-				siteField.addProperty("value", meta.sourceSite);
+				siteField.addProperty("value", meta.sourceSite != null ? meta.sourceSite : "Unknown");
 				siteField.addProperty("inline", true);
 				fields.add(siteField);
 
@@ -120,6 +127,8 @@ public class DiscordWebhookSender {
 				byte[] payload = root.toString().getBytes(StandardCharsets.UTF_8);
 
 				conn = (HttpURLConnection) URI.create(cleanUrl).toURL().openConnection();
+				SSLHelper.configure(conn); // Permite bypass de PKIX / SSL certificate errors no JRE do usuário
+
 				conn.setRequestMethod("POST");
 				conn.setRequestProperty("User-Agent", USER_AGENT);
 				conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -134,19 +143,26 @@ public class DiscordWebhookSender {
 				}
 
 				int code = conn.getResponseCode();
-				if (code < 200 || code >= 300) {
-					// Leitura de erro para diagnóstico caso ocorra
+				if (code >= 200 && code < 300) {
+					if (debug) {
+						System.out.println("[AnimePics Debug] Discord Webhook sent successfully! (HTTP " + code + ")");
+					}
+				} else {
+					StringBuilder err = new StringBuilder();
 					try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()))) {
-						StringBuilder err = new StringBuilder();
 						String line;
 						while ((line = reader.readLine()) != null) {
 							err.append(line);
 						}
-						System.err.println("[AnimePics] Discord Webhook Error HTTP " + code + ": " + err);
+					} catch (Exception ignored) {
 					}
+					System.err.println("[AnimePics] Discord Webhook Error HTTP " + code + ": " + err);
 				}
 			} catch (Exception e) {
-				System.err.println("[AnimePics] Failed to send Discord Webhook: " + e.getMessage());
+				System.err.println("[AnimePics] Failed to send Discord Webhook: (" + e.getClass().getSimpleName() + ") " + e.getMessage());
+				if (debug) {
+					e.printStackTrace();
+				}
 			} finally {
 				if (conn != null) {
 					conn.disconnect();

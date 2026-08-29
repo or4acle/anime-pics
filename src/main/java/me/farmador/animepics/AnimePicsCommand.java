@@ -8,7 +8,7 @@ import org.rusherhack.core.command.annotations.CommandExecutor;
 public class AnimePicsCommand extends Command {
 
 	public AnimePicsCommand() {
-		super("animepics", "Search tags, change sources, webhook, strict NSFW, or skip to next anime picture");
+		super("ap", "AnimePics command: skip, search tags, change sources, debug, or test webhook");
 	}
 
 	private AnimePicsModule getModule() {
@@ -20,7 +20,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * Base command: .animepics
+	 * Base command: .ap
 	 */
 	@CommandExecutor
 	private String baseCommand() {
@@ -30,6 +30,7 @@ public class AnimePicsCommand extends Command {
 		}
 		String webhookStatus = module.isWebhookEnabled() ? (module.getWebhookUrl().isEmpty() ? "[Enabled - No URL]" : "[Active]") : "[Disabled]";
 		return "AnimePics | Source: " + module.getSource().name() +
+				" | Debug: " + module.isDebugMode() +
 				" | Webhook: " + webhookStatus +
 				" | YandeTags: '" + module.getYandeTags() + "'" +
 				" | KonachanTags: '" + module.getKonachanTags() + "'" +
@@ -38,7 +39,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics next
+	 * .ap next
 	 */
 	@CommandExecutor(subCommand = "next")
 	private String nextImage() {
@@ -51,28 +52,38 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics testwebhook -> envia um teste imediato para o canal Discord
+	 * .ap testwebhook -> envia um teste imediato para o canal Discord
 	 */
-	@CommandExecutor(subCommand = {"testwebhook", "webhooktest"})
+	@CommandExecutor(subCommand = {"testwebhook", "webhooktest", "test"})
 	private String testWebhook() {
 		AnimePicsModule module = getModule();
 		if (module == null) {
 			return "AnimePics module not found!";
 		}
 		if (module.getWebhookUrl().trim().isEmpty()) {
-			return "Error: No Webhook URL set! Use .animepics webhook <url>";
+			return "Error: No Webhook URL set! Use .ap webhook <url>";
 		}
-		ImageMetadata testMeta = new ImageMetadata("https://i.imgur.com/83pL6rX.png", "Webhook Test");
-		testMeta.author = "AnimePics Bot";
-		testMeta.rating = "Explicit / NSFW Test";
-		testMeta.postUrl = "https://github.com";
-		testMeta.tags = java.util.List.of("test", "nsfw", "webhook", "rusherhack");
-		DiscordWebhookSender.send(module.getWebhookUrl().trim(), testMeta);
+		module.testWebhook();
 		return "Sent test embed to Discord Webhook! Check your Discord channel.";
 	}
 
 	/**
-	 * .animepics webhook <url>
+	 * .ap debug <on/off>
+	 */
+	@CommandExecutor(subCommand = "debug")
+	@CommandExecutor.Argument("state")
+	private String setDebug(String state) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		boolean enabled = state.equalsIgnoreCase("on") || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("1");
+		module.setDebugMode(enabled);
+		return "Debug mode set to: " + enabled + " (Detailed logs enabled in MultiMC console)";
+	}
+
+	/**
+	 * .ap webhook <url>
 	 */
 	@CommandExecutor(subCommand = "webhook")
 	@CommandExecutor.Argument("url")
@@ -100,11 +111,11 @@ public class AnimePicsCommand extends Command {
 
 		module.setWebhookUrl(url.trim());
 		module.setWebhookEnabled(true);
-		return "Discord Webhook set and enabled! You can test it with .animepics testwebhook";
+		return "Discord Webhook set and enabled! You can test it with .ap testwebhook";
 	}
 
 	/**
-	 * .animepics strict <on/off>
+	 * .ap strict <on/off>
 	 */
 	@CommandExecutor(subCommand = "strict")
 	@CommandExecutor.Argument("state")
@@ -120,7 +131,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics yande <tags...>
+	 * .ap yande <tags...>
 	 */
 	@CommandExecutor(subCommand = {"yande", "yandere"})
 	@CommandExecutor.Argument("tags")
@@ -136,7 +147,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics konachan <tags...>
+	 * .ap konachan <tags...>
 	 */
 	@CommandExecutor(subCommand = "konachan")
 	@CommandExecutor.Argument("tags")
@@ -152,7 +163,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics aibooru <tags...>
+	 * .ap aibooru <tags...>
 	 */
 	@CommandExecutor(subCommand = {"aibooru", "ai"})
 	@CommandExecutor.Argument("tags")
@@ -168,7 +179,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics e621 <tags...>
+	 * .ap e621 <tags...>
 	 */
 	@CommandExecutor(subCommand = {"e621", "e6"})
 	@CommandExecutor.Argument("tags")
@@ -184,23 +195,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics waifu <tag>
-	 */
-	@CommandExecutor(subCommand = {"waifu", "waifuim"})
-	@CommandExecutor.Argument("tag")
-	private String setWaifuTag(String tag) {
-		AnimePicsModule module = getModule();
-		if (module == null) {
-			return "AnimePics module not found!";
-		}
-		module.setSource(AnimePicsModule.Source.WaifuIM);
-		module.setWaifuTag(tag);
-		module.reloadNow();
-		return "Set Waifu.im tag to: [" + tag + "] and loading...";
-	}
-
-	/**
-	 * .animepics purr <tag>
+	 * .ap purr <tag>
 	 */
 	@CommandExecutor(subCommand = {"purr", "purrbot"})
 	@CommandExecutor.Argument("tag")
@@ -222,7 +217,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics search <tags...> -> applies to current booru / source
+	 * .ap search <tags...> -> applies to current booru / source
 	 */
 	@CommandExecutor(subCommand = "search")
 	@CommandExecutor.Argument("tags")
@@ -237,8 +232,6 @@ public class AnimePicsCommand extends Command {
 			module.setAibooruTags(tags);
 		} else if (module.getSource() == AnimePicsModule.Source.E621) {
 			module.setE621Tags(tags);
-		} else if (module.getSource() == AnimePicsModule.Source.WaifuIM) {
-			module.setWaifuTag(tags);
 		} else {
 			module.setSource(AnimePicsModule.Source.YandeRE);
 			module.setYandeTags(tags);
@@ -248,7 +241,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics source <sourceName>
+	 * .ap source <sourceName>
 	 */
 	@CommandExecutor(subCommand = "source")
 	@CommandExecutor.Argument("sourceName")
@@ -264,11 +257,11 @@ public class AnimePicsCommand extends Command {
 				return "Switched source to: " + s.name();
 			}
 		}
-		return "Unknown source '" + sourceName + "'. Valid: YandeRE, Konachan, AIBooru, PurrBot, WaifuIM, E621, NekosLife, LocalFolder";
+		return "Unknown source '" + sourceName + "'. Valid: YandeRE, Konachan, AIBooru, PurrBot, E621, NekosLife, LocalFolder";
 	}
 
 	/**
-	 * .animepics clear -> clears tags
+	 * .ap clear -> clears tags
 	 */
 	@CommandExecutor(subCommand = "clear")
 	private String clearTags() {
@@ -280,7 +273,6 @@ public class AnimePicsCommand extends Command {
 		module.setKonachanTags("");
 		module.setAibooruTags("");
 		module.setE621Tags("");
-		module.setWaifuTag("");
 		module.reloadNow();
 		return "Cleared all search tags and reloaded!";
 	}

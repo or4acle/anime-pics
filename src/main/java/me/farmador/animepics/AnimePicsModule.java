@@ -44,21 +44,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AnimePicsModule extends ToggleableModule {
 
 	private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-	private static final String E621_USER_AGENT = "AnimePicsRusherHack/1.0 (by Farmador on e621)";
-
-	// Tags 100% NSFW para Waifu.im
-	private static final List<String> WAIFU_NSFW_CYCLE_LIST = Arrays.asList(
-			"ero", "ecchi", "oppai", "hentai", "milf", "ass", "paizuri", "oral"
-	);
+	private static final String E621_USER_AGENT = "AnimePicsRusherHack/2.0 (by Farmador on e621)";
 
 	// Tags 100% NSFW para PurrBot
 	private static final List<String> PURRBOT_NSFW_LIST = Arrays.asList(
 			"fuck", "blowjob", "cum", "anal", "pussylick", "solo", "yaoi", "yuri", "neko"
 	);
 
-	// Tags NSFW complementares para injeção automática e reforço quando o usuário não especificar tags
-	private static final List<String> DEFAULT_NSFW_BOORU_TAGS = Arrays.asList(
-			"nude", "breasts", "nipples", "pussy", "sex", "panties", "bikini", "lingerie", "cleavage", "ass", "thighs", "ecchi", "swimsuit"
+	// Tags 100% Hardcore / NSFW para injeção automática quando o usuário não especificar tags manuais
+	private static final List<String> STRICT_NSFW_BOORU_TAGS = Arrays.asList(
+			"nude", "nipples", "pussy", "sex", "fellatio", "cunnilingus", "masturbation",
+			"paizuri", "cum", "creampie", "uncensored", "penetration", "breasts", "no_bra",
+			"areola", "nakadashi", "fingering", "anal", "oral"
 	);
 
 	private final Random random = new Random();
@@ -71,8 +68,11 @@ public class AnimePicsModule extends ToggleableModule {
 	// Fonte Principal
 	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.YandeRE);
 
-	// Strict NSFW Enforcer
+	// Strict NSFW Enforcer (100% explícito, rejeita totalmente Safe / Questionable)
 	private final BooleanSetting strictNSFW = new BooleanSetting("StrictNSFW", true);
+
+	// Debug Mode (Exibe logs no console e chat de tudo o que acontece)
+	private final BooleanSetting debugMode = new BooleanSetting("DebugMode", false);
 
 	// Aspect Ratio Mode
 	private final EnumSetting<AspectMode> aspectMode = new EnumSetting<>("AspectMode", AspectMode.Fit);
@@ -101,11 +101,6 @@ public class AnimePicsModule extends ToggleableModule {
 	private final EnumSetting<PurrBotNsfwTag> purrbotNsfwTag = new EnumSetting<>("PurrNsfwTag", PurrBotNsfwTag.blowjob);
 	private final BooleanSetting cyclePurrbot = new BooleanSetting("CyclePurrBot", true);
 
-	// Waifu.im Settings
-	private final StringSetting waifuCustomTag = new StringSetting("WaifuCustomTag", "");
-	private final EnumSetting<WaifuNsfwTag> waifuTag = new EnumSetting<>("WaifuTag", WaifuNsfwTag.ero);
-	private final BooleanSetting cycleWaifu = new BooleanSetting("CycleWaifu", true);
-
 	// Posição & Tamanho
 	private final NumberSetting<Integer> xPos = new NumberSetting<>("X", 4, 0, 3840);
 	private final NumberSetting<Integer> yPos = new NumberSetting<>("Y", 4, 0, 2160);
@@ -120,6 +115,7 @@ public class AnimePicsModule extends ToggleableModule {
 	// Discord Webhook Settings
 	private final BooleanSetting enableWebhook = new BooleanSetting("EnableWebhook", false);
 	private final StringSetting webhookUrl = new StringSetting("WebhookUrl", "");
+	private final BooleanSetting testWebhookNow = new BooleanSetting("TestWebhookNow", false);
 
 	// GIF Settings (com otimização anti-lag)
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
@@ -135,8 +131,6 @@ public class AnimePicsModule extends ToggleableModule {
 	private BooruRating lastAibooruRating = null;
 	private String lastE621Tags = null;
 	private BooruRating lastE621Rating = null;
-	private String lastWaifuTag = null;
-	private WaifuNsfwTag lastWaifuEnumTag = null;
 	private PurrBotNsfwTag lastPurrTag = null;
 
 	// Estado Interno
@@ -146,11 +140,10 @@ public class AnimePicsModule extends ToggleableModule {
 
 	private final List<TextureFrame> activeFrames = new ArrayList<>();
 	private volatile List<RawFrame> pendingUpload = null;
+	private volatile ImageMetadata currentMetadata = null;
 
 	private int gifFrameIndex = 0;
 	private long lastFrameTime = 0;
-
-	private int waifuCycleIndex = 0;
 	private int purrbotCycleIndex = 0;
 
 	private final List<File> localImageFiles = new ArrayList<>();
@@ -179,21 +172,19 @@ public class AnimePicsModule extends ToggleableModule {
 		this.purrbotNsfwTag.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 		this.cyclePurrbot.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 
-		this.waifuCustomTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
-		this.waifuTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
-		this.cycleWaifu.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
-
 		this.webhookUrl.setVisibility(() -> this.enableWebhook.getValue());
+		this.testWebhookNow.setVisibility(() -> this.enableWebhook.getValue());
 
 		this.registerSettings(
 				this.source,
 				this.strictNSFW,
+				this.debugMode,
 				this.aspectMode,
-				// Yande.re Tag Search & Ratings
+				// Yande.re
 				this.yandeSearchTags,
 				this.yandeRating,
 				this.yandeRandomPage,
-				// Konachan Tag Search & Ratings
+				// Konachan
 				this.konachanSearchTags,
 				this.konachanRating,
 				this.konachanRandomPage,
@@ -208,10 +199,6 @@ public class AnimePicsModule extends ToggleableModule {
 				// PurrBot
 				this.purrbotNsfwTag,
 				this.cyclePurrbot,
-				// Waifu.im
-				this.waifuCustomTag,
-				this.waifuTag,
-				this.cycleWaifu,
 				// Posição & Tamanho
 				this.xPos,
 				this.yPos,
@@ -224,6 +211,7 @@ public class AnimePicsModule extends ToggleableModule {
 				// Discord Webhook
 				this.enableWebhook,
 				this.webhookUrl,
+				this.testWebhookNow,
 				// GIFs
 				this.animateGifs,
 				this.maxGifFrames
@@ -235,12 +223,26 @@ public class AnimePicsModule extends ToggleableModule {
 		this.empty = true;
 		this.ticks = 0;
 		this.initTrackedValues();
+		logDebug("AnimePics Enabled. Starting image loader...");
 		this.loadImage();
 	}
 
 	@Override
 	public void onDisable() {
 		this.clearTextures();
+	}
+
+	public void logDebug(String message) {
+		if (this.debugMode.getValue()) {
+			System.out.println("[AnimePics Debug] " + message);
+		}
+	}
+
+	public void logError(String message, Throwable t) {
+		System.err.println("[AnimePics Error] " + message + (t != null ? " (" + t.getMessage() + ")" : ""));
+		if (this.debugMode.getValue() && t != null) {
+			t.printStackTrace();
+		}
 	}
 
 	private void initTrackedValues() {
@@ -253,8 +255,6 @@ public class AnimePicsModule extends ToggleableModule {
 		this.lastAibooruRating = this.aibooruRating.getValue();
 		this.lastE621Tags = this.e621SearchTags.getValue();
 		this.lastE621Rating = this.e621Rating.getValue();
-		this.lastWaifuTag = this.waifuCustomTag.getValue();
-		this.lastWaifuEnumTag = this.waifuTag.getValue();
 		this.lastPurrTag = this.purrbotNsfwTag.getValue();
 	}
 
@@ -264,6 +264,12 @@ public class AnimePicsModule extends ToggleableModule {
 			return;
 		}
 
+		// Trigger de TestWebhook via GUI
+		if (this.testWebhookNow.getValue()) {
+			this.testWebhookNow.setValue(false);
+			testWebhook();
+		}
+
 		List<RawFrame> pending = this.pendingUpload;
 		if (pending != null) {
 			this.clearTextures();
@@ -271,13 +277,15 @@ public class AnimePicsModule extends ToggleableModule {
 				try {
 					TextureGraphic graphic = new TextureGraphic(new ByteArrayInputStream(raw.pngBytes), raw.width, raw.height);
 					this.activeFrames.add(new TextureFrame(graphic, raw.width, raw.height, raw.delayMs));
-				} catch (Exception ignored) {
+				} catch (Exception e) {
+					logError("Failed to upload frame to GPU texture", e);
 				}
 			}
 			this.empty = this.activeFrames.isEmpty();
 			this.gifFrameIndex = 0;
 			this.lastFrameTime = System.currentTimeMillis();
 			this.pendingUpload = null;
+			logDebug("Frames successfully displayed on screen! Total frames: " + this.activeFrames.size());
 		}
 
 		if (this.source.getValue() == Source.LocalFolder) {
@@ -293,10 +301,10 @@ public class AnimePicsModule extends ToggleableModule {
 		boolean konachanChanged = this.source.getValue() == Source.Konachan && (!Objects.equals(this.lastKonachanTags, this.konachanSearchTags.getValue()) || this.lastKonachanRating != this.konachanRating.getValue());
 		boolean aibooruChanged = this.source.getValue() == Source.AIBooru && (!Objects.equals(this.lastAibooruTags, this.aibooruSearchTags.getValue()) || this.lastAibooruRating != this.aibooruRating.getValue());
 		boolean e621Changed = this.source.getValue() == Source.E621 && (!Objects.equals(this.lastE621Tags, this.e621SearchTags.getValue()) || this.lastE621Rating != this.e621Rating.getValue());
-		boolean waifuChanged = this.source.getValue() == Source.WaifuIM && (!Objects.equals(this.lastWaifuTag, this.waifuCustomTag.getValue()) || this.lastWaifuEnumTag != this.waifuTag.getValue());
 		boolean purrChanged = this.source.getValue() == Source.PurrBot && (this.lastPurrTag != this.purrbotNsfwTag.getValue());
 
-		if (sourceChanged || yandeChanged || konachanChanged || aibooruChanged || e621Changed || waifuChanged || purrChanged) {
+		if (sourceChanged || yandeChanged || konachanChanged || aibooruChanged || e621Changed || purrChanged) {
+			logDebug("Settings change detected. Triggering instant reload...");
 			this.initTrackedValues();
 			this.ticks = 0;
 			this.loadImage();
@@ -402,7 +410,9 @@ public class AnimePicsModule extends ToggleableModule {
 			try (FileOutputStream fos = new FileOutputStream(outFile)) {
 				fos.write(rawBytes);
 			}
-		} catch (Exception ignored) {
+			logDebug("Auto-download saved image to: " + outFile.getAbsolutePath());
+		} catch (Exception e) {
+			logError("Failed to save image locally", e);
 		}
 	}
 
@@ -410,6 +420,19 @@ public class AnimePicsModule extends ToggleableModule {
 		this.initTrackedValues();
 		this.ticks = 0;
 		this.loadImage();
+	}
+
+	public void testWebhook() {
+		if (this.webhookUrl.getValue().trim().isEmpty()) {
+			logError("Cannot test webhook: WebhookUrl is empty!", null);
+			return;
+		}
+		ImageMetadata testMeta = new ImageMetadata("https://i.imgur.com/83pL6rX.png", "AnimePics Webhook Test");
+		testMeta.author = "AnimePics Bot";
+		testMeta.rating = "Explicit / NSFW Test";
+		testMeta.postUrl = "https://github.com";
+		testMeta.tags = List.of("test", "nsfw", "webhook", "rusherhack", "ssl_fix");
+		DiscordWebhookSender.send(this.webhookUrl.getValue().trim(), testMeta, true);
 	}
 
 	// Getters and Setters para o Command
@@ -453,14 +476,6 @@ public class AnimePicsModule extends ToggleableModule {
 		this.e621SearchTags.setValue(tags != null ? tags : "");
 	}
 
-	public String getWaifuTag() {
-		return this.waifuCustomTag.getValue();
-	}
-
-	public void setWaifuTag(String tag) {
-		this.waifuCustomTag.setValue(tag != null ? tag : "");
-	}
-
 	public void setPurrbotNsfwTag(PurrBotNsfwTag tag) {
 		this.purrbotNsfwTag.setValue(tag);
 	}
@@ -489,22 +504,37 @@ public class AnimePicsModule extends ToggleableModule {
 		this.strictNSFW.setValue(strict);
 	}
 
+	public boolean isDebugMode() {
+		return this.debugMode.getValue();
+	}
+
+	public void setDebugMode(boolean debug) {
+		this.debugMode.setValue(debug);
+	}
+
 	private void loadImage() {
 		if (!this.locked.compareAndSet(false, true)) {
+			logDebug("Image loader is currently locked/busy, skipping duplicate request...");
 			return;
 		}
 
 		this.loaderExecutor.submit(() -> {
 			try {
+				logDebug("Fetching metadata from source: " + this.source.getValue().name() + " (StrictNSFW: " + this.strictNSFW.getValue() + ")...");
 				ImageMetadata meta = this.fetchImageMetadata();
 				if (meta == null || meta.url == null) {
+					logDebug("No image candidate found or API returned empty response.");
 					return;
 				}
 
+				this.currentMetadata = meta;
 				String urlStr = meta.url;
+				logDebug("Selected image: " + urlStr + " (Source: " + meta.sourceSite + ", Rating: " + meta.rating + ")");
+
 				byte[] rawBytes;
 				if (urlStr.startsWith("local://")) {
 					if (this.localImageFiles.isEmpty()) {
+						logDebug("Local folder is empty!");
 						return;
 					}
 					File file = this.localImageFiles.get(this.localImageIndex);
@@ -519,23 +549,27 @@ public class AnimePicsModule extends ToggleableModule {
 				}
 
 				if (rawBytes == null || rawBytes.length == 0) {
+					logDebug("Downloaded byte array is empty!");
 					return;
 				}
 
+				logDebug("Downloaded image payload: " + (rawBytes.length / 1024) + " KB");
+
 				// Enviar para Discord Webhook se habilitado
 				if (this.enableWebhook.getValue() && !this.webhookUrl.getValue().trim().isEmpty()) {
-					DiscordWebhookSender.send(this.webhookUrl.getValue().trim(), meta);
+					DiscordWebhookSender.send(this.webhookUrl.getValue().trim(), meta, this.debugMode.getValue());
 				}
 
 				if (GifDecoder.isGif(rawBytes)) {
+					logDebug("Decoding animated GIF frames...");
 					List<RawFrame> decoded = GifDecoder.decode(rawBytes, this.maxGifFrames.getValue());
 					if (!decoded.isEmpty()) {
 						this.pendingUpload = decoded;
+						logDebug("Decoded " + decoded.size() + " GIF frames successfully.");
 					}
 				} else {
 					BufferedImage img = ImageIO.read(new ByteArrayInputStream(rawBytes));
 					if (img != null) {
-						// Downscale if ridiculously large (e.g. 4K/8K uncompressed image) to preserve VRAM & framerate
 						BufferedImage optimized = downscaleImage(img, 1280);
 						ByteArrayOutputStream baos = new ByteArrayOutputStream();
 						ImageIO.write(optimized, "png", baos);
@@ -543,9 +577,12 @@ public class AnimePicsModule extends ToggleableModule {
 						List<RawFrame> list = new ArrayList<>();
 						list.add(new RawFrame(baos.toByteArray(), optimized.getWidth(), optimized.getHeight(), 100));
 						this.pendingUpload = list;
+					} else {
+						logDebug("ImageIO could not decode image format.");
 					}
 				}
-			} catch (Exception ignored) {
+			} catch (Exception e) {
+				logError("Error in loadImage background worker", e);
 			} finally {
 				this.locked.set(false);
 			}
@@ -589,7 +626,7 @@ public class AnimePicsModule extends ToggleableModule {
 		}
 
 		if (this.strictNSFW.getValue() && (userTags == null || userTags.trim().isEmpty())) {
-			String spicyTag = DEFAULT_NSFW_BOORU_TAGS.get(this.random.nextInt(DEFAULT_NSFW_BOORU_TAGS.size()));
+			String spicyTag = STRICT_NSFW_BOORU_TAGS.get(this.random.nextInt(STRICT_NSFW_BOORU_TAGS.size()));
 			parts.add(URLEncoder.encode(spicyTag, StandardCharsets.UTF_8));
 		}
 
@@ -736,6 +773,7 @@ public class AnimePicsModule extends ToggleableModule {
 					String url = "https://api.purrbot.site/v2/img/nsfw/" + tag + "/gif";
 					HttpURLConnection conn = open(url, USER_AGENT);
 					if (conn.getResponseCode() != 200) {
+						logDebug("PurrBot API response code: " + conn.getResponseCode());
 						return null;
 					}
 					JsonObject pRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
@@ -749,69 +787,11 @@ public class AnimePicsModule extends ToggleableModule {
 					return null;
 				}
 
-				case WaifuIM -> {
-					String custom = this.waifuCustomTag.getValue().trim();
-					String tag;
-					if (!custom.isEmpty()) {
-						tag = custom.replace(' ', '-');
-					} else if (this.cycleWaifu.getValue()) {
-						tag = WAIFU_NSFW_CYCLE_LIST.get(this.waifuCycleIndex);
-						this.waifuCycleIndex = (this.waifuCycleIndex + 1) % WAIFU_NSFW_CYCLE_LIST.size();
-					} else {
-						tag = this.waifuTag.getValue().name();
-					}
-
-					String wUrl = "https://api.waifu.im/images?included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8) + "&is_nsfw=true";
-					HttpURLConnection conn = open(wUrl, USER_AGENT);
-					if (conn.getResponseCode() != 200) {
-						return null;
-					}
-
-					JsonObject wRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
-					JsonArray items = wRes.has("items") ? wRes.getAsJsonArray("items") : wRes.getAsJsonArray("images");
-					if (items == null || items.isEmpty()) {
-						return null;
-					}
-
-					JsonObject item = items.get(this.random.nextInt(items.size())).getAsJsonObject();
-					if (item.has("url") && !item.get("url").isJsonNull()) {
-						String imgUrl = item.get("url").getAsString();
-						ImageMetadata meta = new ImageMetadata(imgUrl, "Waifu.im");
-						meta.rating = "NSFW / Hentai";
-						if (item.has("source") && !item.get("source").isJsonNull()) {
-							meta.sourceOrigin = item.get("source").getAsString();
-						}
-						if (item.has("artist") && !item.get("artist").isJsonNull()) {
-							JsonObject artistObj = item.getAsJsonObject("artist");
-							if (artistObj.has("name")) {
-								meta.author = artistObj.get("name").getAsString();
-							}
-						}
-						if (item.has("width")) {
-							meta.width = item.get("width").getAsInt();
-						}
-						if (item.has("height")) {
-							meta.height = item.get("height").getAsInt();
-						}
-						if (item.has("tags")) {
-							JsonArray tArr = item.getAsJsonArray("tags");
-							List<String> tList = new ArrayList<>();
-							for (JsonElement tEl : tArr) {
-								if (tEl.isJsonObject() && tEl.getAsJsonObject().has("name")) {
-									tList.add(tEl.getAsJsonObject().get("name").getAsString());
-								}
-							}
-							meta.tags = tList;
-						}
-						return meta;
-					}
-					return null;
-				}
-
 				case NekosLife -> {
 					String url = "https://nekos.life/api/v2/img/lewd";
 					HttpURLConnection conn = open(url, USER_AGENT);
 					if (conn.getResponseCode() != 200) {
+						logDebug("NekosLife API response code: " + conn.getResponseCode());
 						return null;
 					}
 					JsonObject nRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
@@ -831,7 +811,8 @@ public class AnimePicsModule extends ToggleableModule {
 					return meta;
 				}
 			}
-		} catch (Exception ignored) {
+		} catch (Exception e) {
+			logError("Failed to fetch image metadata", e);
 		}
 		return null;
 	}
@@ -892,9 +873,11 @@ public class AnimePicsModule extends ToggleableModule {
 			if (!tagQuery.isEmpty()) {
 				url += "&tags=" + tagQuery;
 			}
+			logDebug("Requesting Moebooru: " + url);
 
 			HttpURLConnection conn = open(url, USER_AGENT);
 			if (conn.getResponseCode() != 200) {
+				logDebug("Moebooru HTTP Error: " + conn.getResponseCode());
 				return null;
 			}
 
@@ -912,19 +895,25 @@ public class AnimePicsModule extends ToggleableModule {
 				if (!el.isJsonObject()) continue;
 				JsonObject p = el.getAsJsonObject();
 				if (filterStrictNsfw) {
-					if (p.has("rating") && p.get("rating").getAsString().equalsIgnoreCase("s")) {
-						continue;
+					// Quando StrictNSFW está ativo, aceita ESTRITAMENTE explicit ("e")
+					if (p.has("rating")) {
+						String r = p.get("rating").getAsString();
+						if (!r.equalsIgnoreCase("e") && !r.equalsIgnoreCase("explicit")) {
+							continue;
+						}
 					}
 				}
 				candidates.add(p);
 			}
 
 			if (candidates.isEmpty()) {
-				return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+				logDebug("No strictly explicit posts on page " + page + " (total posts returned: " + posts.size() + ")");
+				return null;
 			}
 
 			return candidates.get(this.random.nextInt(candidates.size()));
 		} catch (Exception e) {
+			logError("Error fetching Moebooru post", e);
 			return null;
 		}
 	}
@@ -935,9 +924,11 @@ public class AnimePicsModule extends ToggleableModule {
 			if (!tagQuery.isEmpty()) {
 				url += "&tags=" + tagQuery;
 			}
+			logDebug("Requesting Danbooru: " + url);
 
 			HttpURLConnection conn = open(url, ua);
 			if (conn.getResponseCode() != 200) {
+				logDebug("Danbooru HTTP Error: " + conn.getResponseCode());
 				return null;
 			}
 
@@ -955,19 +946,24 @@ public class AnimePicsModule extends ToggleableModule {
 				if (!el.isJsonObject()) continue;
 				JsonObject p = el.getAsJsonObject();
 				if (filterStrictNsfw) {
-					if (p.has("rating") && (p.get("rating").getAsString().equalsIgnoreCase("s") || p.get("rating").getAsString().equalsIgnoreCase("g"))) {
-						continue;
+					if (p.has("rating")) {
+						String r = p.get("rating").getAsString();
+						if (!r.equalsIgnoreCase("e") && !r.equalsIgnoreCase("explicit")) {
+							continue;
+						}
 					}
 				}
 				candidates.add(p);
 			}
 
 			if (candidates.isEmpty()) {
-				return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+				logDebug("No strictly explicit posts found on Danbooru page " + page);
+				return null;
 			}
 
 			return candidates.get(this.random.nextInt(candidates.size()));
 		} catch (Exception e) {
+			logError("Error fetching Danbooru post", e);
 			return null;
 		}
 	}
@@ -978,9 +974,11 @@ public class AnimePicsModule extends ToggleableModule {
 			if (!tagQuery.isEmpty()) {
 				url += "&tags=" + tagQuery;
 			}
+			logDebug("Requesting E621: " + url);
 
 			HttpURLConnection conn = open(url, E621_USER_AGENT);
 			if (conn.getResponseCode() != 200) {
+				logDebug("E621 HTTP Error: " + conn.getResponseCode());
 				return null;
 			}
 
@@ -998,25 +996,31 @@ public class AnimePicsModule extends ToggleableModule {
 				if (!el.isJsonObject()) continue;
 				JsonObject p = el.getAsJsonObject();
 				if (filterStrictNsfw) {
-					if (p.has("rating") && (p.get("rating").getAsString().equalsIgnoreCase("s") || p.get("rating").getAsString().equalsIgnoreCase("g"))) {
-						continue;
+					if (p.has("rating")) {
+						String r = p.get("rating").getAsString();
+						if (!r.equalsIgnoreCase("e") && !r.equalsIgnoreCase("explicit")) {
+							continue;
+						}
 					}
 				}
 				candidates.add(p);
 			}
 
 			if (candidates.isEmpty()) {
-				return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+				logDebug("No strictly explicit posts on E621 page " + page);
+				return null;
 			}
 
 			return candidates.get(this.random.nextInt(candidates.size()));
 		} catch (Exception e) {
+			logError("Error fetching E621 post", e);
 			return null;
 		}
 	}
 
 	private static HttpURLConnection open(String urlString, String userAgent) throws Exception {
 		HttpURLConnection conn = (HttpURLConnection) URI.create(urlString).toURL().openConnection();
+		SSLHelper.configure(conn); // Previne PKIX path validation failed em qualquer JRE
 		conn.setRequestProperty("User-Agent", userAgent);
 		conn.setRequestProperty("Accept", "application/json, image/*, */*");
 		conn.setConnectTimeout(10000);
@@ -1041,7 +1045,6 @@ public class AnimePicsModule extends ToggleableModule {
 		Konachan,
 		AIBooru,
 		PurrBot,
-		WaifuIM,
 		E621,
 		NekosLife,
 		LocalFolder
@@ -1053,8 +1056,8 @@ public class AnimePicsModule extends ToggleableModule {
 	}
 
 	public enum BooruRating {
-		Explicit("rating:explicit"),
-		Questionable("rating:questionable");
+		Explicit("rating:e"),
+		Questionable("rating:q");
 
 		public final String param;
 
@@ -1065,10 +1068,6 @@ public class AnimePicsModule extends ToggleableModule {
 
 	public enum PurrBotNsfwTag {
 		fuck, blowjob, cum, anal, pussylick, solo, yaoi, yuri, neko
-	}
-
-	public enum WaifuNsfwTag {
-		ero, ecchi, oppai, hentai, milf, ass, paizuri, oral
 	}
 
 	static class RawFrame {

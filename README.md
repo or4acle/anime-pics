@@ -1,64 +1,53 @@
-# AnimePics (RusherHack)
+# AnimePics (RusherHack Plugin)
 
-Plugin para RusherHack baseado no módulo `AnimePics`: overlay 2D no HUD exibindo imagens e GIFs de anime NSFW de diversas fontes, com pesquisa de tags personalizadas, envio automático para Webhooks do Discord e decodificação otimizada anti-lag.
+Plugin para RusherHack baseado no módulo `AnimePics`: overlay 2D no HUD exibindo imagens e GIFs de anime NSFW de diversas fontes, com pesquisa de tags personalizadas, envio automático para Webhooks do Discord, modo debug com diagnósticos em tempo real e bypass automático de certificados SSL.
 
 ---
 
-## ✨ Principais Recursos e Melhorias
+## ✨ Principais Recursos e Correções
+
+### 🛡️ Correção de Certificados SSL (PKIX Path Validator Fix)
+- Implementado o utilitário `SSLHelper` que bypassa problemas de validação de certificados SSL/TLS da JVM no Windows (como erros `PKIX path validation failed: java.security.cert.CertPathValidatorException`).
+- Garante que os Webhooks do Discord e o download de imagens de todos os boorus e CDNs funcionem 100% sem erros de rede.
+
+### 🐞 Modo Debug (`DebugMode` / `.ap debug on`)
+- **Diagnóstico em Tempo Real**: Exibe no console do MultiMC/Minecraft todos os detalhes das requisições (URL completa, código de resposta HTTP, tags aplicadas, metadados do post, autor, resolução, tamanho em bytes e eventuais erros com stacktrace).
+- Permite diagnosticar e monitorar facilmente o fluxo de imagens e o envio para o Discord.
 
 ### 🔞 100% Focado em Conteúdo NSFW (`StrictNSFW`)
-- **Filtro Estrito Ativo**: Descarta automaticamente resultados SFW/Safe e prioriza `rating:explicit`.
-- **Injeção de Tags Explícitas**: Caso nenhuma tag seja informada na pesquisa, injeta tags NSFW dinâmicas para sempre garantir artes adultas.
+- **Filtro Estrito Ativo**: Descarta automaticamente resultados SFW/Safe e aceita apenas `rating:explicit` (`rating:e`).
+- **Injeção de Tags 100% Explícitas**: Caso nenhuma tag seja informada na pesquisa, injeta tags adultas explícitas (`nude`, `nipples`, `pussy`, `sex`, `fellatio`, `cunnilingus`, `masturbation`, `paizuri`, `cum`, `creampie`, `uncensored`, `breasts`, etc.) para garantir artes 100% NSFW.
 
-### 🌐 8 Fontes de Imagens e GIFs
-1. **YandeRE** (`yande.re`): Grande acervo de artes em alta resolução com filtro `Explicit` e suporte a tags.
-2. **Konachan** (`konachan.com`): Papéis de parede e artes explícitas com tags e paginação aleatória.
-3. **AIBooru** (`aibooru.online`): Milhares de artes NSFW em estilo anime geradas por IA com metadados completos.
-4. **PurrBot** (`purrbot.site v2`): GIFs animados Hentai (`fuck`, `blowjob`, `cum`, `anal`, `pussylick`, `solo`, `yaoi`, `yuri`, `neko`) com ciclo automático.
-5. **WaifuIM** (`waifu.im`): Tags adultas (`ero`, `ecchi`, `oppai`, `hentai`, `milf`, `ass`, `paizuri`, `oral`) ou tags personalizadas.
-6. **E621** (`e621.net`): Grande catálogo anthro/monster-girl com filtro `rating:explicit`.
-7. **NekosLife** (`nekos.life`): Imagens lewd de nekos e garotas anime.
-8. **LocalFolder**: Carrega imagens e GIFs da sua pasta local `.minecraft/rusherhack/animepics/`.
+### 📡 Discord Webhook Integrado com Teste Imediato
+- Envia automaticamente cards completos com miniatura da arte, link do post original, autor, resolução e tags.
+- Botão **`TestWebhookNow`** no menu do RusherHack (ClickGUI) e comando **`.ap testwebhook`** para testar a transmissão imediatamente.
 
-### ⚡ Otimização Anti-Lag e Redução de Memória (Sem Stutter)
-- **Processamento 100% em Segundo Plano**: A decodificação de GIFs e conversão de PNG ocorre em uma thread dedicada (`AnimePics-Worker`), liberando a thread principal do Minecraft para 0 quedas de FPS.
-- **Downscaling Inteligente**: Resoluções gigantescas são redimensionadas de forma otimizada para economizar VRAM e memória Heap.
-- **Controle de Frames de GIF**: Limite configurável (`MaxGifFrames`) e amostragem inteligente para evitar estouro de memória com GIFs longos.
+### ⌨️ Comandos Rápidos (`.ap`)
 
-### 🖼️ Aspect Mode (`Fit` vs `Stretch`)
-- **Modo Fit**: Preserva a proporção original da imagem/GIF sem deformar ou esticar.
-- **Modo Stretch**: Estica a imagem para preencher exatamente o retângulo configurado.
-
-### 📡 Discord Webhook Integrado
-- Envia automaticamente cards de metadados (título, autor, fonte, link do post e miniatura) para seu canal do Discord.
-- Comando de teste imediato `.animepics testwebhook`.
-
----
-
-## ⌨️ Comandos no Chat
+O comando principal do plugin agora utiliza o prefixo **`.ap`** (evitando conflito com o comando de configurações nativo do RusherHack):
 
 | Comando | Descrição |
 |---|---|
-| `.animepics` | Exibe o status atual, fonte ativa e tags configuradas. |
-| `.animepics next` | Força o carregamento imediato da próxima imagem/GIF. |
-| `.animepics source <fonte>` | Troca a fonte (`YandeRE`, `Konachan`, `AIBooru`, `PurrBot`, `WaifuIM`, `E621`, `NekosLife`, `LocalFolder`). |
-| `.animepics yande <tags>` | Define tags de pesquisa para o Yande.re e recarrega. |
-| `.animepics konachan <tags>` | Define tags para o Konachan e recarrega. |
-| `.animepics aibooru <tags>` | Define tags para o AIBooru e recarrega. |
-| `.animepics e621 <tags>` | Define tags para o E621 e recarrega. |
-| `.animepics purr <tag>` | Define a categoria de GIF do PurrBot (`fuck`, `blowjob`, `cum`, `anal`, etc.). |
-| `.animepics waifu <tag>` | Define a tag do Waifu.im. |
-| `.animepics search <tags>` | Pesquisa tags na fonte atualmente selecionada. |
-| `.animepics clear` | Limpa todas as tags de busca. |
-| `.animepics strict <on/off>` | Ativa ou desativa o filtro NSFW estrito. |
-| `.animepics webhook <url>` | Configura ou atualiza a URL do Webhook do Discord. |
-| `.animepics testwebhook` | Envia um card de teste para verificar seu canal do Discord. |
+| `.ap` | Exibe o status atual, fonte ativa, tags e status do webhook. |
+| `.ap next` | Carrega a próxima imagem/GIF imediatamente. |
+| `.ap testwebhook` | Envia um card de teste para verificar seu canal do Discord. |
+| `.ap debug on/off` | Ativa ou desativa o modo debug com logs detalhados no console. |
+| `.ap strict on/off` | Ativa ou desativa o filtro NSFW estrito. |
+| `.ap webhook <url>` | Configura a URL do Webhook do Discord e ativa o envio. |
+| `.ap source <fonte>` | Troca a fonte (`YandeRE`, `Konachan`, `AIBooru`, `PurrBot`, `E621`, `NekosLife`, `LocalFolder`). |
+| `.ap yande <tags>` | Define tags de pesquisa para o Yande.re e recarrega. |
+| `.ap konachan <tags>` | Define tags para o Konachan e recarrega. |
+| `.ap aibooru <tags>` | Define tags para o AIBooru e recarrega. |
+| `.ap e621 <tags>` | Define tags para o E621 e recarrega. |
+| `.ap purr <tag>` | Define a categoria de GIF do PurrBot (`fuck`, `blowjob`, `cum`, `anal`, etc.). |
+| `.ap search <tags>` | Pesquisa tags na fonte atualmente selecionada. |
+| `.ap clear` | Limpa todas as tags de busca. |
 
 ---
 
 ## 🔨 Como Compilar
 
-Requer **JDK 21**. No terminal / prompt do projeto:
+Requer **JDK 21**. No prompt de comando na pasta do projeto:
 
 **Windows:**
 ```powershell
@@ -77,8 +66,8 @@ build/libs/AnimePics-1.0.0.jar
 
 ---
 
-## 💾 Instalação no Minecraft
+## 💾 Instalação no Minecraft / MultiMC
 
-1. Copie o arquivo `AnimePics-1.0.0.jar` para a pasta `.minecraft/rusherhack/plugins/`.
-2. Inicie o Minecraft com o parâmetro `-Drusherhack.enablePlugins=true` nos argumentos da JVM.
-3. Compatível com Minecraft **1.21.1** (RusherHack **2.0.5**).
+1. Copie o arquivo `AnimePics-1.0.0.jar` da pasta `build/libs/` para `.minecraft/rusherhack/plugins/`.
+2. Verifique se o argumento `-Drusherhack.enablePlugins=true` está configurado nas configurações de Java da instância do MultiMC.
+3. Inicie o jogo (Minecraft 1.21.1 com Fabric).
