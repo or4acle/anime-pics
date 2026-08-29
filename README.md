@@ -1,103 +1,53 @@
-# AnimePics + JOI Companion (RusherHack Plugin)
+# AnimePics (RusherHack)
 
-Plugin para RusherHack 1.21.1 com overlay 2D no HUD exibindo imagens e GIFs NSFW de diversas fontes, com **JOI (Jerk Off Incentive) interativo em tempo real**, metrônomo de ritmo, contador e histórico de sessões/nuts/edges com persistência local, sistema de avaliação por pontuação/rank e integração com Webhooks do Discord.
+RusherHack plugin based on the Femhack `AnimePics` module: a 2D HUD overlay displaying random NSFW anime pictures & animated GIFs on screen with custom tag search capabilities.
 
----
+## WARNING: Can get EXTREMELY laggy (especially with Purrbot on)!!!!!!!!!!!!!!!!!
 
-## ✨ Principais Recursos
+Original idea by oehrasa (Anime-Pics module on Oehrasa-Bookies-Addon)
 
-### 🎭 Modo JOI (Jerk Off Incentive) e HUD Dinâmico
-- **HUD Elegante no Minecraft**: Exibe textos de incentivo dinâmicos, metrônomo de ritmo para controle de velocidade e badges de status logo abaixo da arte.
-- **6 Estilos de Personalidade (`.ap style <estilo>`)**:
-  - `Humiliation` (ou `zueira` / `roast`): Frases cômicas e humilhantes de zueira ("Look at you stroking to 2D pixels in Minecraft kkkk", "Mãos pra cima seu viciado", etc.).
-  - `Gentle`: Focado em ritmo lento, apreciação dos detalhes e respiração suave.
-  - `Strict`: Comandos de obediência rígida, proibição de acelerar e foco absoluto.
-  - `Hardcore`: Ritmo acelerado, estímulos intensos e foco no clímax.
-  - `Edging`: Foco em controle de borda, comandos de pausa (Hands-Off) e acúmulo de sensibilidade.
-  - `Dynamic`: Alterna inteligentemente entre os estilos com base no tempo de sessão.
-- **Metrônomo Visual de Ritmo**:
-  - `Slow & Steady` (40 BPM)
-  - `Moderate Pace` (75 BPM)
-  - `Intense Speed` (120 BPM)
-  - `Full Speed Frenzy` (160 BPM)
-  - `HOLD & EDGE!` (Pausa total / mãos fora)
-  - `Hands Free! Look Only`
+## Features
 
----
+- **Tag Search System (`SearchTags`)**:
+  - **Yande.re & Konachan Search**: Type any character, franchise, clothing, or descriptive tags (e.g. `genshin_impact`, `blue_archive`, `swimsuit`, `thighs`, `maid`, etc.). Supports multiple tags separated by space or comma.
+  - **Waifu.im Search**: Type custom tag keywords or select from predefined NSFW categories.
+  - **Instant Live Refresh**: Automatically reloads and fetches matching results immediately when you update your search tags.
+  - **Smart Fallback**: If a random high page has no results for specific niche tags, it automatically queries earlier pages to always deliver pictures.
 
-### 📈 Rastreador de Estatísticas & Sistema de Pontuação / Ranks
-As estatísticas são salvas automaticamente em `.minecraft/rusherhack/animepics/joi_stats.json`:
-- **Total de Nuts** acumulados.
-- **Total de Edges** realizados.
-- **Duração da Sessão** atual e tempo total acumulado.
-- **Recordes Pessoais**: Sessão mais rápida e sessão mais longa.
-- **Avaliação de Desempenho (Ranks)**:
-  - ⚡ **Rank C** (`Quickshot / Instant Release`): < 2 minutos.
-  - 🔥 **Rank B** (`Rapid Fire`): 2 a 6 minutos.
-  - 🎯 **Rank A** (`Sweet Spot` ou `Controlled Spark`): 6 a 15 minutos (ou com edges múltiplos).
-  - 💎 **Rank S** (`Iron Will` ou `Edge Connoisseur`): 15 a 30 minutos com alta resistência.
-  - 👑 **Rank SS** (`Stamina Overlord`): 30 a 45 minutos com múltiplos edges.
-  - 🌌 **Rank SSS** (`Ascended Transcendence`): 45+ minutos de controle supremo.
+- **NSFW Focused Image & GIF Sources**:
+  - **YandeRE** — High-resolution anime artwork with `Explicit` and `Questionable` rating filters, custom tag search, and random pagination.
+  - **Konachan** — Anime wallpapers via `konachan.com` with NSFW ratings (`Explicit` / `Questionable`), custom tag search, and random pages.
+  - **PurrBot** — High-quality animated NSFW GIFs (`fuck`, `blowjob`, `cum`, `anal`, `pussylick`, `solo`, `yaoi`, `yuri`, `neko`) with full frame animation and automatic tag cycling.
+  - **WaifuIM** — NSFW tags (`ero`, `ecchi`, `oppai`, `hentai`, `milf`, `ass`, `paizuri`, `oral`, or custom tags) with tag cycling.
+  - **LocalFolder** — Load and display your own local images/GIFs from `.minecraft/rusherhack/animepics/` (`.png`, `.jpg`, `.jpeg`, `.gif`).
 
----
+- **Automatic Downloads (`AutoDownload`)**:
+  - Automatically saves every fetched image and animated GIF into your `.minecraft/rusherhack/animepics/downloads/` folder.
 
-### 📡 Webhooks do Discord para Eventos e Marcos
-- **Marcos de Clímax (`.ap nut [nota]`)**: Envia um embed especial para o Discord com a avaliação/rank, tempo de sessão, imagem que provocou o clímax, total de nuts, contagem de edges e notas do jogador.
-- **Marcos de Edge (`.ap edge`)**: Registra e notifica edges e tempo acumulado.
-- **Feed NSFW Contínuo**: Envia cada arte nova com miniatura, autor, resolução, tags e link original.
+- **Animated GIF Support**:
+  - Real-time GIF decoding with configurable frame limits (`MaxGifFrames`) and toggleable animation (`AnimateGifs`).
 
----
+- **Clean & Lightweight**:
+  - Native 2D rendering using RusherHack's `IRenderer2D`, customizable positions (`X`, `Y`), dimensions (`Width`, `Height`), and refresh delay in game ticks.
 
-### 🔞 100% Focado em Conteúdo NSFW (`StrictNSFW`)
-- Descarta automaticamente resultados SFW/Safe e aceita apenas `rating:explicit` (`rating:e`).
-- Injeta automaticamente tags adultas explícitas quando não houver termos de busca manuais.
+## Build Instructions
 
----
+Requires **JDK 21**. In the project root directory:
 
-## ⌨️ Lista Completa de Comandos (`.ap`)
-
-| Comando | Descrição |
-|---|---|
-| `.ap` | Exibe o resumo do status atual (fonte, JOI, estatísticas da sessão). |
-| `.ap nut [nota]` | Registra um clímax, calcula score/rank, salva estatísticas e envia embed para o Discord. |
-| `.ap edge` | Registra um edge na sessão atual e inicia cooldown. |
-| `.ap stats` | Exibe no chat todas as suas estatísticas, recordes e médias acumuladas. |
-| `.ap resetstats` | Reseta todo o histórico e estatísticas salvas. |
-| `.ap joi <on/off>` | Ativa ou desativa o modo JOI no HUD. |
-| `.ap style <gentle/strict/hardcore/edging/dynamic>` | Altera o estilo do JOI. |
-| `.ap next` | Carrega a próxima imagem/GIF imediatamente. |
-| `.ap testwebhook` | Envia uma mensagem de teste para o Discord Webhook configurado. |
-| `.ap webhook <url>` | Configura a URL do Webhook do Discord. |
-| `.ap debug <on/off>` | Ativa o modo de logs detalhados no console do MultiMC. |
-| `.ap strict <on/off>` | Ativa/desativa o filtro estrito de NSFW. |
-| `.ap source <fonte>` | Troca a fonte (`YandeRE`, `Konachan`, `AIBooru`, `PurrBot`, `E621`, `NekosLife`, `LocalFolder`). |
-| `.ap yande <tags>` | Define tags de pesquisa para o Yande.re e recarrega. |
-| `.ap konachan <tags>` | Define tags para o Konachan e recarrega. |
-| `.ap aibooru <tags>` | Define tags para o AIBooru e recarrega. |
-| `.ap e621 <tags>` | Define tags para o E621 e recarrega. |
-| `.ap purr <tag>` | Define a categoria de GIF do PurrBot (`fuck`, `blowjob`, `cum`, `anal`, etc.). |
-| `.ap search <tags>` | Pesquisa tags na fonte ativa. |
-| `.ap clear` | Limpa todas as tags de busca. |
-
----
-
-## 🔨 Como Compilar
-
-Requer **JDK 21**. Execute:
-
+**Linux / macOS:**
 ```bash
 ./gradlew build
 ```
 
-O arquivo compilado estará em:
+**Windows:**
+```powershell
+.\gradlew.bat build
 ```
-build/libs/AnimePics-1.0.0.jar
-```
 
----
+The compiled `.jar` file will be generated in `build/libs/AnimePics-1.0.0.jar`.
 
-## 💾 Instalação no Minecraft / MultiMC
+## Installation
 
-1. Copie o arquivo `AnimePics-1.0.0.jar` da pasta `build/libs/` para `.minecraft/rusherhack/plugins/`.
-2. Certifique-se de que `-Drusherhack.enablePlugins=true` está presente nas configurações Java do MultiMC.
-3. Inicie o jogo (Minecraft 1.21.1 com Fabric).
+1. Copy `AnimePics-1.0.0.jar` into your `.minecraft/rusherhack/plugins/` directory.
+2. Launch Minecraft with `-Drusherhack.enablePlugins=true` in your JVM launch arguments.
+3. Target Minecraft version: **1.21.1** (RusherHack **2.0.5**).
