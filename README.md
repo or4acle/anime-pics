@@ -2,6 +2,8 @@
 
 RusherHack plugin based on the Femhack `AnimePics` module: a 2D HUD overlay displaying random NSFW anime pictures & animated GIFs on screen with custom tag search capabilities.
 
+## WARNING: Can get EXTREMELY laggy (especially with Purrbot on)!!!!!!!!!!!!!!!!!
+
 ## Features
 
 - **Tag Search System (`SearchTags`)**:
