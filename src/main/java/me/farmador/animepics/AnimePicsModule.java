@@ -84,6 +84,10 @@ public class AnimePicsModule extends ToggleableModule {
 	private final NumberSetting<Integer> delay = new NumberSetting<>("Delay", 600, 60, 12000);
 	private final BooleanSetting autoDownload = new BooleanSetting("AutoDownload", false);
 
+	// Discord Webhook Settings
+	private final BooleanSetting enableWebhook = new BooleanSetting("EnableWebhook", false);
+	private final StringSetting webhookUrl = new StringSetting("WebhookUrl", "");
+
 	// GIF Settings
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
 	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 150, 2, 500);
@@ -134,6 +138,8 @@ public class AnimePicsModule extends ToggleableModule {
 		this.waifuTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 		this.cycleWaifu.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 
+		this.webhookUrl.setVisibility(() -> this.enableWebhook.getValue());
+
 		this.registerSettings(
 				this.source,
 				// Yande.re Tag Search & Ratings
@@ -160,6 +166,10 @@ public class AnimePicsModule extends ToggleableModule {
 				this.pauseRefresh,
 				this.delay,
 				this.autoDownload,
+				// Discord Webhook
+				this.enableWebhook,
+				this.webhookUrl,
+				// GIFs
 				this.animateGifs,
 				this.maxGifFrames
 		);
@@ -315,6 +325,69 @@ public class AnimePicsModule extends ToggleableModule {
 		}
 	}
 
+	public void reloadNow() {
+		this.initTrackedValues();
+		this.ticks = 0;
+		this.loadImage();
+	}
+
+	// Getters and Setters para o Command
+	public Source getSource() {
+		return this.source.getValue();
+	}
+
+	public void setSource(Source source) {
+		this.source.setValue(source);
+	}
+
+	public String getYandeTags() {
+		return this.yandeSearchTags.getValue();
+	}
+
+	public void setYandeTags(String tags) {
+		this.yandeSearchTags.setValue(tags != null ? tags : "");
+	}
+
+	public String getKonachanTags() {
+		return this.konachanSearchTags.getValue();
+	}
+
+	public void setKonachanTags(String tags) {
+		this.konachanSearchTags.setValue(tags != null ? tags : "");
+	}
+
+	public String getWaifuTag() {
+		return this.waifuCustomTag.getValue();
+	}
+
+	public void setWaifuTag(String tag) {
+		this.waifuCustomTag.setValue(tag != null ? tag : "");
+	}
+
+	public void setPurrbotNsfwTag(PurrBotNsfwTag tag) {
+		this.purrbotNsfwTag.setValue(tag);
+	}
+
+	public void setCyclePurrbot(boolean cycle) {
+		this.cyclePurrbot.setValue(cycle);
+	}
+
+	public String getWebhookUrl() {
+		return this.webhookUrl.getValue();
+	}
+
+	public void setWebhookUrl(String url) {
+		this.webhookUrl.setValue(url != null ? url : "");
+	}
+
+	public boolean isWebhookEnabled() {
+		return this.enableWebhook.getValue();
+	}
+
+	public void setWebhookEnabled(boolean enabled) {
+		this.enableWebhook.setValue(enabled);
+	}
+
 	private void loadImage() {
 		if (!this.locked.compareAndSet(false, true)) {
 			return;
@@ -322,11 +395,12 @@ public class AnimePicsModule extends ToggleableModule {
 
 		new Thread(() -> {
 			try {
-				String urlStr = this.fetchImageUrl();
-				if (urlStr == null) {
+				ImageMetadata meta = this.fetchImageMetadata();
+				if (meta == null || meta.url == null) {
 					return;
 				}
 
+				String urlStr = meta.url;
 				byte[] rawBytes;
 				if (urlStr.startsWith("local://")) {
 					if (this.localImageFiles.isEmpty()) {
@@ -334,6 +408,7 @@ public class AnimePicsModule extends ToggleableModule {
 					}
 					File file = this.localImageFiles.get(this.localImageIndex);
 					this.localImageIndex = (this.localImageIndex + 1) % this.localImageFiles.size();
+					meta.author = file.getName();
 					rawBytes = Files.readAllBytes(file.toPath());
 				} else {
 					rawBytes = downloadBytes(urlStr);
@@ -344,6 +419,11 @@ public class AnimePicsModule extends ToggleableModule {
 
 				if (rawBytes == null || rawBytes.length == 0) {
 					return;
+				}
+
+				// Enviar para Discord Webhook se habilitado
+				if (this.enableWebhook.getValue() && !this.webhookUrl.getValue().trim().isEmpty()) {
+					DiscordWebhookSender.send(this.webhookUrl.getValue().trim(), meta);
 				}
 
 				if (GifDecoder.isGif(rawBytes)) {
@@ -385,7 +465,7 @@ public class AnimePicsModule extends ToggleableModule {
 		return String.join("+", parts);
 	}
 
-	private String fetchImageUrl() {
+	private ImageMetadata fetchImageMetadata() {
 		try {
 			switch (this.source.getValue()) {
 				case YandeRE -> {
@@ -398,11 +478,38 @@ public class AnimePicsModule extends ToggleableModule {
 					}
 
 					if (chosen != null) {
+						String imgUrl = null;
 						if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
-							return chosen.get("sample_url").getAsString();
+							imgUrl = chosen.get("sample_url").getAsString();
+						} else if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+							imgUrl = chosen.get("file_url").getAsString();
 						}
-						if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
-							return chosen.get("file_url").getAsString();
+
+						if (imgUrl != null) {
+							ImageMetadata meta = new ImageMetadata(imgUrl, "Yande.re");
+							if (chosen.has("id")) {
+								meta.postUrl = "https://yande.re/post/show/" + chosen.get("id").getAsString();
+							}
+							if (chosen.has("author")) {
+								meta.author = chosen.get("author").getAsString();
+							}
+							if (chosen.has("source") && !chosen.get("source").isJsonNull()) {
+								meta.sourceOrigin = chosen.get("source").getAsString();
+							}
+							if (chosen.has("rating")) {
+								meta.rating = chosen.get("rating").getAsString();
+							}
+							if (chosen.has("width")) {
+								meta.width = chosen.get("width").getAsInt();
+							}
+							if (chosen.has("height")) {
+								meta.height = chosen.get("height").getAsInt();
+							}
+							if (chosen.has("tags")) {
+								String tagsStr = chosen.get("tags").getAsString();
+								meta.tags = Arrays.asList(tagsStr.split("\\s+"));
+							}
+							return meta;
 						}
 					}
 					return null;
@@ -418,11 +525,38 @@ public class AnimePicsModule extends ToggleableModule {
 					}
 
 					if (chosen != null) {
+						String imgUrl = null;
 						if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
-							return chosen.get("sample_url").getAsString();
+							imgUrl = chosen.get("sample_url").getAsString();
+						} else if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+							imgUrl = chosen.get("file_url").getAsString();
 						}
-						if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
-							return chosen.get("file_url").getAsString();
+
+						if (imgUrl != null) {
+							ImageMetadata meta = new ImageMetadata(imgUrl, "Konachan");
+							if (chosen.has("id")) {
+								meta.postUrl = "https://konachan.com/post/show/" + chosen.get("id").getAsString();
+							}
+							if (chosen.has("author")) {
+								meta.author = chosen.get("author").getAsString();
+							}
+							if (chosen.has("source") && !chosen.get("source").isJsonNull()) {
+								meta.sourceOrigin = chosen.get("source").getAsString();
+							}
+							if (chosen.has("rating")) {
+								meta.rating = chosen.get("rating").getAsString();
+							}
+							if (chosen.has("width")) {
+								meta.width = chosen.get("width").getAsInt();
+							}
+							if (chosen.has("height")) {
+								meta.height = chosen.get("height").getAsInt();
+							}
+							if (chosen.has("tags")) {
+								String tagsStr = chosen.get("tags").getAsString();
+								meta.tags = Arrays.asList(tagsStr.split("\\s+"));
+							}
+							return meta;
 						}
 					}
 					return null;
@@ -444,7 +578,11 @@ public class AnimePicsModule extends ToggleableModule {
 					}
 					JsonObject pRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
 					if (pRes.has("link") && !pRes.get("link").isJsonNull()) {
-						return pRes.get("link").getAsString();
+						String gifUrl = pRes.get("link").getAsString();
+						ImageMetadata meta = new ImageMetadata(gifUrl, "PurrBot.site");
+						meta.rating = "NSFW / GIF";
+						meta.tags = List.of(tag, "gif", "purrbot");
+						return meta;
 					}
 					return null;
 				}
@@ -475,13 +613,43 @@ public class AnimePicsModule extends ToggleableModule {
 
 					JsonObject item = items.get(this.random.nextInt(items.size())).getAsJsonObject();
 					if (item.has("url") && !item.get("url").isJsonNull()) {
-						return item.get("url").getAsString();
+						String imgUrl = item.get("url").getAsString();
+						ImageMetadata meta = new ImageMetadata(imgUrl, "Waifu.im");
+						meta.rating = "NSFW";
+						if (item.has("source") && !item.get("source").isJsonNull()) {
+							meta.sourceOrigin = item.get("source").getAsString();
+						}
+						if (item.has("artist") && !item.get("artist").isJsonNull()) {
+							JsonObject artistObj = item.getAsJsonObject("artist");
+							if (artistObj.has("name")) {
+								meta.author = artistObj.get("name").getAsString();
+							}
+						}
+						if (item.has("width")) {
+							meta.width = item.get("width").getAsInt();
+						}
+						if (item.has("height")) {
+							meta.height = item.get("height").getAsInt();
+						}
+						if (item.has("tags")) {
+							JsonArray tArr = item.getAsJsonArray("tags");
+							List<String> tList = new ArrayList<>();
+							for (JsonElement tEl : tArr) {
+								if (tEl.isJsonObject() && tEl.getAsJsonObject().has("name")) {
+									tList.add(tEl.getAsJsonObject().get("name").getAsString());
+								}
+							}
+							meta.tags = tList;
+						}
+						return meta;
 					}
 					return null;
 				}
 
 				case LocalFolder -> {
-					return "local://image";
+					ImageMetadata meta = new ImageMetadata("local://image", "Local Folder");
+					meta.rating = "Local";
+					return meta;
 				}
 			}
 		} catch (Exception ignored) {

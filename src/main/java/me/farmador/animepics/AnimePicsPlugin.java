@@ -9,6 +9,7 @@ public class AnimePicsPlugin extends Plugin {
 	public void onLoad() {
 		this.getLogger().info("AnimePics loaded");
 		RusherHackAPI.getModuleManager().registerFeature(new AnimePicsModule());
+		RusherHackAPI.getCommandManager().registerFeature(new AnimePicsCommand());
 	}
 
 	@Override
