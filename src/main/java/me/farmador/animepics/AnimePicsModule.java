@@ -12,7 +12,6 @@ import org.rusherhack.client.api.feature.module.ToggleableModule;
 import org.rusherhack.client.api.render.IRenderer2D;
 import org.rusherhack.client.api.render.graphic.TextureGraphic;
 import org.rusherhack.core.event.subscribe.Subscribe;
-import org.rusherhack.core.notification.NotificationType;
 import org.rusherhack.core.setting.BooleanSetting;
 import org.rusherhack.core.setting.EnumSetting;
 import org.rusherhack.core.setting.NumberSetting;
@@ -54,21 +53,22 @@ public class AnimePicsModule extends ToggleableModule {
 	// Fonte Principal (Somente NSFW & LocalFolder)
 	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.YandeRE);
 
-	// Yande.re Settings
+	// Yande.re Settings (Pesquisa livre de tags: ex. "genshin_impact", "bikini", "thighs", etc.)
+	private final StringSetting yandeSearchTags = new StringSetting("YandeSearchTags", "");
 	private final EnumSetting<BooruRating> yandeRating = new EnumSetting<>("YandeRating", BooruRating.Explicit);
-	private final StringSetting yandeCustomTag = new StringSetting("YandeTag", "");
 	private final BooleanSetting yandeRandomPage = new BooleanSetting("YandeRandomPage", true);
 
-	// Konachan Settings (Somente rating NSFW)
+	// Konachan Settings (Pesquisa livre de tags)
+	private final StringSetting konachanSearchTags = new StringSetting("KonachanSearchTags", "");
 	private final EnumSetting<BooruRating> konachanRating = new EnumSetting<>("KonachanRating", BooruRating.Explicit);
-	private final StringSetting konachanCustomTag = new StringSetting("KonachanTag", "");
 	private final BooleanSetting konachanRandomPage = new BooleanSetting("KonachanRandomPage", true);
 
 	// PurrBot (GIFs NSFW) Settings
 	private final EnumSetting<PurrBotNsfwTag> purrbotNsfwTag = new EnumSetting<>("PurrNsfwTag", PurrBotNsfwTag.blowjob);
 	private final BooleanSetting cyclePurrbot = new BooleanSetting("CyclePurrBot", true);
 
-	// Waifu.im Settings (Somente tags NSFW)
+	// Waifu.im Settings (Pesquisa por tag customizada ou seletor enum)
+	private final StringSetting waifuCustomTag = new StringSetting("WaifuCustomTag", "");
 	private final EnumSetting<WaifuNsfwTag> waifuTag = new EnumSetting<>("WaifuTag", WaifuNsfwTag.ero);
 	private final BooleanSetting cycleWaifu = new BooleanSetting("CycleWaifu", true);
 
@@ -108,34 +108,44 @@ public class AnimePicsModule extends ToggleableModule {
 		super("AnimePics", "Displays random NSFW anime pictures & GIFs on screen", ModuleCategory.RENDER);
 
 		// Visibilidade dinâmica para as fontes
+		this.yandeSearchTags.setVisibility(() -> this.source.getValue() == Source.YandeRE);
 		this.yandeRating.setVisibility(() -> this.source.getValue() == Source.YandeRE);
-		this.yandeCustomTag.setVisibility(() -> this.source.getValue() == Source.YandeRE);
 		this.yandeRandomPage.setVisibility(() -> this.source.getValue() == Source.YandeRE);
 
+		this.konachanSearchTags.setVisibility(() -> this.source.getValue() == Source.Konachan);
 		this.konachanRating.setVisibility(() -> this.source.getValue() == Source.Konachan);
-		this.konachanCustomTag.setVisibility(() -> this.source.getValue() == Source.Konachan);
 		this.konachanRandomPage.setVisibility(() -> this.source.getValue() == Source.Konachan);
 
 		this.purrbotNsfwTag.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 		this.cyclePurrbot.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 
+		this.waifuCustomTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 		this.waifuTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 		this.cycleWaifu.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 
+		// Recarregar imediatamente quando o player alterar tags de pesquisa ou fontes
+		this.source.onChange(() -> triggerReload());
+		this.yandeSearchTags.onChange(() -> triggerReload());
+		this.konachanSearchTags.onChange(() -> triggerReload());
+		this.waifuCustomTag.onChange(() -> triggerReload());
+		this.purrbotNsfwTag.onChange(() -> triggerReload());
+		this.waifuTag.onChange(() -> triggerReload());
+
 		this.registerSettings(
 				this.source,
-				// Yande.re
+				// Yande.re Tag Search & Ratings
+				this.yandeSearchTags,
 				this.yandeRating,
-				this.yandeCustomTag,
 				this.yandeRandomPage,
-				// Konachan
+				// Konachan Tag Search & Ratings
+				this.konachanSearchTags,
 				this.konachanRating,
-				this.konachanCustomTag,
 				this.konachanRandomPage,
 				// PurrBot
 				this.purrbotNsfwTag,
 				this.cyclePurrbot,
 				// Waifu.im
+				this.waifuCustomTag,
 				this.waifuTag,
 				this.cycleWaifu,
 				// Posição & Tamanho
@@ -150,6 +160,11 @@ public class AnimePicsModule extends ToggleableModule {
 				this.animateGifs,
 				this.maxGifFrames
 		);
+	}
+
+	private void triggerReload() {
+		this.ticks = 0;
+		this.loadImage();
 	}
 
 	@Override
@@ -327,75 +342,66 @@ public class AnimePicsModule extends ToggleableModule {
 		}, "AnimePics-Loader").start();
 	}
 
+	private String buildBooruTagQuery(String userTags, String ratingParam) {
+		List<String> parts = new ArrayList<>();
+		if (ratingParam != null && !ratingParam.isEmpty()) {
+			parts.add(ratingParam);
+		}
+		if (userTags != null) {
+			String trimmed = userTags.trim();
+			if (!trimmed.isEmpty()) {
+				// Divide por espaços ou vírgulas
+				String[] tokens = trimmed.split("[,\\s]+");
+				for (String token : tokens) {
+					if (!token.isEmpty()) {
+						parts.add(URLEncoder.encode(token, StandardCharsets.UTF_8));
+					}
+				}
+			}
+		}
+		return String.join("+", parts);
+	}
+
 	private String fetchImageUrl() {
 		try {
 			switch (this.source.getValue()) {
 				case YandeRE -> {
-					String tags = "";
-					String rVal = this.yandeRating.getValue().param;
-					if (!rVal.isEmpty()) {
-						tags += rVal;
-					}
-					String custom = this.yandeCustomTag.getValue().trim();
-					if (!custom.isEmpty()) {
-						if (!tags.isEmpty()) tags += "+";
-						tags += URLEncoder.encode(custom, StandardCharsets.UTF_8);
-					}
-					int page = this.yandeRandomPage.getValue() ? (this.random.nextInt(40) + 1) : 1;
-					String url = "https://yande.re/post.json?limit=25&page=" + page;
-					if (!tags.isEmpty()) {
-						url += "&tags=" + tags;
+					String tagQuery = buildBooruTagQuery(this.yandeSearchTags.getValue(), this.yandeRating.getValue().param);
+					int page = this.yandeRandomPage.getValue() ? (this.random.nextInt(35) + 1) : 1;
+
+					// Tenta na página sorteada, se vier vazia tenta na página 1
+					JsonObject chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, page);
+					if (chosen == null && page != 1) {
+						chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, 1);
 					}
 
-					HttpURLConnection conn = open(url);
-					if (conn.getResponseCode() != 200) {
-						return null;
-					}
-					JsonElement root = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-					if (!root.isJsonArray()) return null;
-					JsonArray posts = root.getAsJsonArray();
-					if (posts.isEmpty()) return null;
-					JsonObject chosen = posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
-					if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
-						return chosen.get("sample_url").getAsString();
-					}
-					if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
-						return chosen.get("file_url").getAsString();
+					if (chosen != null) {
+						if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
+							return chosen.get("sample_url").getAsString();
+						}
+						if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+							return chosen.get("file_url").getAsString();
+						}
 					}
 					return null;
 				}
 
 				case Konachan -> {
-					String tags = "";
-					String rVal = this.konachanRating.getValue().param;
-					if (!rVal.isEmpty()) {
-						tags += rVal;
-					}
-					String custom = this.konachanCustomTag.getValue().trim();
-					if (!custom.isEmpty()) {
-						if (!tags.isEmpty()) tags += "+";
-						tags += URLEncoder.encode(custom, StandardCharsets.UTF_8);
-					}
-					int page = this.konachanRandomPage.getValue() ? (this.random.nextInt(40) + 1) : 1;
-					String url = "https://konachan.com/post.json?limit=25&page=" + page;
-					if (!tags.isEmpty()) {
-						url += "&tags=" + tags;
+					String tagQuery = buildBooruTagQuery(this.konachanSearchTags.getValue(), this.konachanRating.getValue().param);
+					int page = this.konachanRandomPage.getValue() ? (this.random.nextInt(35) + 1) : 1;
+
+					JsonObject chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, page);
+					if (chosen == null && page != 1) {
+						chosen = fetchBooruPost("https://konachan.com/post.json", tagQuery, 1);
 					}
 
-					HttpURLConnection conn = open(url);
-					if (conn.getResponseCode() != 200) {
-						return null;
-					}
-					JsonElement root = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-					if (!root.isJsonArray()) return null;
-					JsonArray posts = root.getAsJsonArray();
-					if (posts.isEmpty()) return null;
-					JsonObject chosen = posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
-					if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
-						return chosen.get("sample_url").getAsString();
-					}
-					if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
-						return chosen.get("file_url").getAsString();
+					if (chosen != null) {
+						if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
+							return chosen.get("sample_url").getAsString();
+						}
+						if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+							return chosen.get("file_url").getAsString();
+						}
 					}
 					return null;
 				}
@@ -422,11 +428,15 @@ public class AnimePicsModule extends ToggleableModule {
 				}
 
 				case WaifuIM -> {
-					String tag = this.cycleWaifu.getValue()
-							? WAIFU_NSFW_CYCLE_LIST.get(this.waifuCycleIndex)
-							: this.waifuTag.getValue().name();
-					if (this.cycleWaifu.getValue()) {
+					String custom = this.waifuCustomTag.getValue().trim();
+					String tag;
+					if (!custom.isEmpty()) {
+						tag = custom.replace(' ', '-');
+					} else if (this.cycleWaifu.getValue()) {
+						tag = WAIFU_NSFW_CYCLE_LIST.get(this.waifuCycleIndex);
 						this.waifuCycleIndex = (this.waifuCycleIndex + 1) % WAIFU_NSFW_CYCLE_LIST.size();
+					} else {
+						tag = this.waifuTag.getValue().name();
 					}
 
 					String wUrl = "https://api.waifu.im/images?included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8) + "&is_nsfw=true";
@@ -455,6 +465,32 @@ public class AnimePicsModule extends ToggleableModule {
 		} catch (Exception ignored) {
 		}
 		return null;
+	}
+
+	private JsonObject fetchBooruPost(String baseUrl, String tagQuery, int page) {
+		try {
+			String url = baseUrl + "?limit=30&page=" + page;
+			if (!tagQuery.isEmpty()) {
+				url += "&tags=" + tagQuery;
+			}
+
+			HttpURLConnection conn = open(url);
+			if (conn.getResponseCode() != 200) {
+				return null;
+			}
+
+			JsonElement root = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+			if (!root.isJsonArray()) {
+				return null;
+			}
+			JsonArray posts = root.getAsJsonArray();
+			if (posts.isEmpty()) {
+				return null;
+			}
+			return posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	private static HttpURLConnection open(String urlString) throws Exception {

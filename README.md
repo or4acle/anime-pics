@@ -1,14 +1,20 @@
 # AnimePics (RusherHack)
 
-RusherHack plugin based on the Femhack `AnimePics` module: a 2D HUD overlay displaying random NSFW anime pictures & animated GIFs on screen.
+RusherHack plugin based on the Femhack `AnimePics` module: a 2D HUD overlay displaying random NSFW anime pictures & animated GIFs on screen with custom tag search capabilities.
 
 ## Features
 
+- **Tag Search System (`SearchTags`)**:
+  - **Yande.re & Konachan Search**: Type any character, franchise, clothing, or descriptive tags (e.g. `genshin_impact`, `blue_archive`, `swimsuit`, `thighs`, `maid`, etc.). Supports multiple tags separated by space or comma.
+  - **Waifu.im Search**: Type custom tag keywords or select from predefined NSFW categories.
+  - **Instant Live Refresh**: Automatically reloads and fetches matching results immediately when you update your search tags.
+  - **Smart Fallback**: If a random high page has no results for specific niche tags, it automatically queries earlier pages to always deliver pictures.
+
 - **NSFW Focused Image & GIF Sources**:
   - **YandeRE** — High-resolution anime artwork with `Explicit` and `Questionable` rating filters, custom tag search, and random pagination.
-  - **Konachan** — Anime wallpapers via `konachan.com` with NSFW ratings (`Explicit` / `Questionable`), custom tag filtering, and random pages.
+  - **Konachan** — Anime wallpapers via `konachan.com` with NSFW ratings (`Explicit` / `Questionable`), custom tag search, and random pages.
   - **PurrBot** — High-quality animated NSFW GIFs (`fuck`, `blowjob`, `cum`, `anal`, `pussylick`, `solo`, `yaoi`, `yuri`, `neko`) with full frame animation and automatic tag cycling.
-  - **WaifuIM** — NSFW tags (`ero`, `ecchi`, `oppai`, `hentai`, `milf`, `ass`, `paizuri`, `oral`) with tag cycling.
+  - **WaifuIM** — NSFW tags (`ero`, `ecchi`, `oppai`, `hentai`, `milf`, `ass`, `paizuri`, `oral`, or custom tags) with tag cycling.
   - **LocalFolder** — Load and display your own local images/GIFs from `.minecraft/rusherhack/animepics/` (`.png`, `.jpg`, `.jpeg`, `.gif`).
 
 - **Automatic Downloads (`AutoDownload`)**:
