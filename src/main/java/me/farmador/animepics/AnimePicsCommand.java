@@ -8,7 +8,7 @@ import org.rusherhack.core.command.annotations.CommandExecutor;
 public class AnimePicsCommand extends Command {
 
 	public AnimePicsCommand() {
-		super("ap", "AnimePics command: skip, search tags, change sources, debug, or test webhook");
+		super("ap", "AnimePics & JOI Companion: nut, edge, stats, joi, skip, tags, sources, webhook");
 	}
 
 	private AnimePicsModule getModule() {
@@ -28,14 +28,138 @@ public class AnimePicsCommand extends Command {
 		if (module == null) {
 			return "AnimePics module not found!";
 		}
+		JoiManager joi = module.getJoiManager();
 		String webhookStatus = module.isWebhookEnabled() ? (module.getWebhookUrl().isEmpty() ? "[Enabled - No URL]" : "[Active]") : "[Disabled]";
-		return "AnimePics | Source: " + module.getSource().name() +
-				" | Debug: " + module.isDebugMode() +
-				" | Webhook: " + webhookStatus +
-				" | YandeTags: '" + module.getYandeTags() + "'" +
-				" | KonachanTags: '" + module.getKonachanTags() + "'" +
-				" | AIBooruTags: '" + module.getAibooruTags() + "'" +
-				" | E621Tags: '" + module.getE621Tags() + "'";
+		return "AnimePics JOI | Source: " + module.getSource().name() +
+				" | JOI: " + (module.isJoiEnabled() ? "[" + module.getJoiStyle().name() + "]" : "[Disabled]") +
+				" | 💦 Nuts: " + joi.getStats().totalNuts +
+				" | 🧗 Edges: " + joi.getCurrentSessionEdges() +
+				" | Session: " + joi.formatDuration(joi.getSessionElapsedSeconds()) +
+				" | Webhook: " + webhookStatus;
+	}
+
+	/**
+	 * .ap nut [note...] / .ap nutted [note...]
+	 */
+	@CommandExecutor(subCommand = {"nut", "nutted", "climax", "finish"})
+	private String recordNutNoArg() {
+		return recordNut("");
+	}
+
+	@CommandExecutor(subCommand = {"nut", "nutted", "climax", "finish"})
+	@CommandExecutor.Argument("note")
+	private String recordNut(String note) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+
+		JoiManager.NutResult result = module.recordNut(note);
+		JoiManager joi = module.getJoiManager();
+		String durStr = joi.formatDuration(result.durationSeconds());
+
+		return "💦 Climax Logged! [Rank " + result.score().rank() + " - " + result.score().title() + "] " +
+				"| Time: " + durStr +
+				" | Edges: " + result.sessionEdges() +
+				" | Total Nuts: #" + result.allTimeNuts() +
+				(note != null && !note.isEmpty() ? " | Note: \"" + note + "\"" : "") +
+				(module.isWebhookEnabled() ? " (Sent to Discord)" : "");
+	}
+
+	/**
+	 * .ap edge
+	 */
+	@CommandExecutor(subCommand = {"edge", "edged", "hold"})
+	private String recordEdge() {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		module.recordEdge();
+		JoiManager joi = module.getJoiManager();
+		return "🧗 Edge logged! Current session edges: " + joi.getCurrentSessionEdges() +
+				" | Session time: " + joi.formatDuration(joi.getSessionElapsedSeconds()) +
+				" (Cooldown active for 10s)";
+	}
+
+	/**
+	 * .ap stats
+	 */
+	@CommandExecutor(subCommand = {"stats", "stat", "records", "profile"})
+	private String showStats() {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		JoiManager joi = module.getJoiManager();
+		JoiStats stats = joi.getStats();
+
+		String fastStr = stats.fastestNutSeconds > 0 ? joi.formatDuration(stats.fastestNutSeconds) : "N/A";
+		String longStr = stats.longestNutSeconds > 0 ? joi.formatDuration(stats.longestNutSeconds) : "N/A";
+		long avgSec = stats.totalNuts > 0 ? (stats.totalSessionTimeSeconds / stats.totalNuts) : 0;
+		String avgStr = avgSec > 0 ? joi.formatDuration(avgSec) : "N/A";
+
+		return "📊 --- [ AnimePics JOI Statistics ] ---\n" +
+				"💦 Total Nuts: " + stats.totalNuts + "\n" +
+				"🧗 Total Edges: " + stats.totalEdges + "\n" +
+				"⏱️ Current Session: " + joi.formatDuration(joi.getSessionElapsedSeconds()) + " (Edges: " + joi.getCurrentSessionEdges() + ")\n" +
+				"⚡ Fastest Record: " + fastStr + "\n" +
+				"💎 Longest Record: " + longStr + "\n" +
+				"📈 Average Session: " + avgStr + "\n" +
+				"🎭 Active Style: " + module.getJoiStyle().name();
+	}
+
+	/**
+	 * .ap resetstats
+	 */
+	@CommandExecutor(subCommand = {"resetstats", "clearstats"})
+	private String resetStats() {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		module.resetJoiStats();
+		return "All JOI statistics and records have been reset!";
+	}
+
+	/**
+	 * .ap joi <on/off>
+	 */
+	@CommandExecutor(subCommand = "joi")
+	@CommandExecutor.Argument("state")
+	private String setJoiState(String state) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		boolean enabled = state.equalsIgnoreCase("on") || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("1");
+		module.setJoiEnabled(enabled);
+		return "JOI Companion mode set to: " + enabled;
+	}
+
+	/**
+	 * .ap style <gentle/strict/humiliation/hardcore/edging/dynamic>
+	 */
+	@CommandExecutor(subCommand = {"style", "joistyle", "voice"})
+	@CommandExecutor.Argument("styleName")
+	private String setJoiStyle(String styleName) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		if (styleName.equalsIgnoreCase("roast") || styleName.equalsIgnoreCase("zueira") ||
+				styleName.equalsIgnoreCase("humilhar") || styleName.equalsIgnoreCase("mean") ||
+				styleName.equalsIgnoreCase("brat") || styleName.equalsIgnoreCase("degrading")) {
+			module.setJoiStyle(JoiManager.JoiStyle.Humiliation);
+			return "JOI Companion style set to: Humiliation (Zueira / Roast mode active!)";
+		}
+		for (JoiManager.JoiStyle s : JoiManager.JoiStyle.values()) {
+			if (s.name().equalsIgnoreCase(styleName)) {
+				module.setJoiStyle(s);
+				return "JOI Companion style set to: " + s.name();
+			}
+		}
+		return "Unknown style '" + styleName + "'. Valid: Gentle, Strict, Humiliation (zueira), Hardcore, Edging, Dynamic";
 	}
 
 	/**
@@ -52,7 +176,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .ap testwebhook -> envia um teste imediato para o canal Discord
+	 * .ap testwebhook
 	 */
 	@CommandExecutor(subCommand = {"testwebhook", "webhooktest", "test"})
 	private String testWebhook() {

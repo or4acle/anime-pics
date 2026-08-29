@@ -10,6 +10,7 @@ import org.rusherhack.client.api.events.render.EventRender2D;
 import org.rusherhack.client.api.feature.module.ModuleCategory;
 import org.rusherhack.client.api.feature.module.ToggleableModule;
 import org.rusherhack.client.api.render.IRenderer2D;
+import org.rusherhack.client.api.render.font.IFontRenderer;
 import org.rusherhack.client.api.render.graphic.TextureGraphic;
 import org.rusherhack.core.event.subscribe.Subscribe;
 import org.rusherhack.core.setting.BooleanSetting;
@@ -65,17 +66,29 @@ public class AnimePicsModule extends ToggleableModule {
 		return t;
 	});
 
+	// JOI (Jerk Off Incentive) Manager
+	private JoiManager joiManager;
+
 	// Fonte Principal
 	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.YandeRE);
 
 	// Strict NSFW Enforcer (100% explícito, rejeita totalmente Safe / Questionable)
 	private final BooleanSetting strictNSFW = new BooleanSetting("StrictNSFW", true);
 
-	// Debug Mode (Exibe logs no console e chat de tudo o que acontece)
+	// Debug Mode (Exibe logs no console de tudo o que acontece)
 	private final BooleanSetting debugMode = new BooleanSetting("DebugMode", false);
 
 	// Aspect Ratio Mode
 	private final EnumSetting<AspectMode> aspectMode = new EnumSetting<>("AspectMode", AspectMode.Fit);
+
+	// JOI Settings
+	private final BooleanSetting enableJoi = new BooleanSetting("EnableJOI", true);
+	private final EnumSetting<JoiManager.JoiStyle> joiStyle = new EnumSetting<>("JOIStyle", JoiManager.JoiStyle.Dynamic);
+	private final BooleanSetting showJoiHud = new BooleanSetting("ShowJOIHud", true);
+	private final BooleanSetting showMetronome = new BooleanSetting("ShowTempo", true);
+	private final BooleanSetting showStatsBadge = new BooleanSetting("ShowStatsBadge", true);
+	private final BooleanSetting webhookOnNut = new BooleanSetting("WebhookOnNut", true);
+	private final BooleanSetting webhookOnEdge = new BooleanSetting("WebhookOnEdge", true);
 
 	// Yande.re Settings
 	private final StringSetting yandeSearchTags = new StringSetting("YandeTags", "");
@@ -117,7 +130,7 @@ public class AnimePicsModule extends ToggleableModule {
 	private final StringSetting webhookUrl = new StringSetting("WebhookUrl", "");
 	private final BooleanSetting testWebhookNow = new BooleanSetting("TestWebhookNow", false);
 
-	// GIF Settings (com otimização anti-lag)
+	// GIF Settings
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
 	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 60, 2, 200);
 
@@ -150,7 +163,7 @@ public class AnimePicsModule extends ToggleableModule {
 	private int localImageIndex = 0;
 
 	public AnimePicsModule() {
-		super("AnimePics", "Displays random NSFW anime pictures & GIFs on screen", ModuleCategory.RENDER);
+		super("AnimePics", "Displays random NSFW anime pictures & GIFs on screen with JOI companion", ModuleCategory.RENDER);
 
 		// Visibilidade dinâmica para as fontes
 		this.yandeSearchTags.setVisibility(() -> this.source.getValue() == Source.YandeRE);
@@ -172,14 +185,27 @@ public class AnimePicsModule extends ToggleableModule {
 		this.purrbotNsfwTag.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 		this.cyclePurrbot.setVisibility(() -> this.source.getValue() == Source.PurrBot);
 
+		this.joiStyle.setVisibility(() -> this.enableJoi.getValue());
+		this.showJoiHud.setVisibility(() -> this.enableJoi.getValue());
+		this.showMetronome.setVisibility(() -> this.enableJoi.getValue());
+		this.showStatsBadge.setVisibility(() -> this.enableJoi.getValue());
+
 		this.webhookUrl.setVisibility(() -> this.enableWebhook.getValue());
 		this.testWebhookNow.setVisibility(() -> this.enableWebhook.getValue());
+		this.webhookOnNut.setVisibility(() -> this.enableWebhook.getValue());
+		this.webhookOnEdge.setVisibility(() -> this.enableWebhook.getValue());
 
 		this.registerSettings(
 				this.source,
 				this.strictNSFW,
 				this.debugMode,
 				this.aspectMode,
+				// JOI
+				this.enableJoi,
+				this.joiStyle,
+				this.showJoiHud,
+				this.showMetronome,
+				this.showStatsBadge,
 				// Yande.re
 				this.yandeSearchTags,
 				this.yandeRating,
@@ -212,24 +238,37 @@ public class AnimePicsModule extends ToggleableModule {
 				this.enableWebhook,
 				this.webhookUrl,
 				this.testWebhookNow,
+				this.webhookOnNut,
+				this.webhookOnEdge,
 				// GIFs
 				this.animateGifs,
 				this.maxGifFrames
 		);
 	}
 
+	public JoiManager getJoiManager() {
+		if (this.joiManager == null) {
+			this.joiManager = new JoiManager(mc.gameDirectory);
+		}
+		return this.joiManager;
+	}
+
 	@Override
 	public void onEnable() {
 		this.empty = true;
 		this.ticks = 0;
+		getJoiManager().startSession();
 		this.initTrackedValues();
-		logDebug("AnimePics Enabled. Starting image loader...");
+		logDebug("AnimePics Enabled. Starting image loader and JOI session...");
 		this.loadImage();
 	}
 
 	@Override
 	public void onDisable() {
 		this.clearTextures();
+		if (this.joiManager != null) {
+			this.joiManager.stopSession();
+		}
 	}
 
 	public void logDebug(String message) {
@@ -262,6 +301,10 @@ public class AnimePicsModule extends ToggleableModule {
 	private void onUpdate(EventUpdate event) {
 		if (mc.level == null) {
 			return;
+		}
+
+		if (this.enableJoi.getValue()) {
+			getJoiManager().update(this.joiStyle.getValue());
 		}
 
 		// Trigger de TestWebhook via GUI
@@ -366,7 +409,108 @@ public class AnimePicsModule extends ToggleableModule {
 		IRenderer2D renderer = RusherHackAPI.getRenderer2D();
 		renderer.begin(event.getMatrixStack());
 		renderer.drawGraphicRectangle(currentFrame.graphic, drawX, drawY, drawW, drawH);
+
+		// JOI Overlay Rendering
+		if (this.enableJoi.getValue() && this.showJoiHud.getValue()) {
+			renderJoiHud(renderer, event, drawX, drawY, drawW, drawH);
+		}
+
 		renderer.end();
+	}
+
+	private void renderJoiHud(IRenderer2D renderer, EventRender2D event, double drawX, double drawY, double drawW, double drawH) {
+		JoiManager joi = getJoiManager();
+		IFontRenderer font = renderer.getFontRenderer();
+
+		double hudY = drawY + drawH + 3;
+		double hudW = Math.max(drawW, 220);
+		double hudH = 38;
+
+		if (this.showMetronome.getValue() && this.showStatsBadge.getValue()) {
+			hudH = 46;
+		}
+
+		// Fundo escuro translúcido com borda elegante
+		renderer.drawRectangle(drawX, hudY, hudW, hudH, 0xCC111118);
+		renderer.drawRectangleOutline(drawX, hudY, hudW, hudH, 1.0f, 0x55FF1493);
+
+		double currentTextY = hudY + 4;
+
+		// 1. Status Bar / Metrônomo
+		if (this.showMetronome.getValue()) {
+			JoiManager.TempoMode tempo = joi.getCurrentTempo();
+			String timerStr = "⏱️ " + joi.formatDuration(joi.getSessionElapsedSeconds());
+			String tempoStr = tempo.displayName;
+
+			// Ponto pulsante de batida / metrônomo
+			int beatColor = joi.getBeatState() ? 0xFFFF0055 : 0xFF555566;
+			renderer.drawCircle(drawX + 8, currentTextY + 4, 3.5, beatColor);
+
+			font.drawString(event.getMatrixStack(), tempoStr, drawX + 16, currentTextY, tempo.color, true);
+
+			double timerWidth = font.getStringWidth(timerStr);
+			font.drawString(event.getMatrixStack(), timerStr, drawX + hudW - timerWidth - 6, currentTextY, 0xFFE0E0E0, true);
+
+			currentTextY += 10;
+		}
+
+		// 2. Badges de Estatísticas (Edges & Nuts)
+		if (this.showStatsBadge.getValue()) {
+			String badges = "🧗 Edges: " + joi.getCurrentSessionEdges() + "  |  💦 Nuts: " + joi.getStats().totalNuts;
+			font.drawString(event.getMatrixStack(), badges, drawX + 6, currentTextY, 0xFFFFB6C1, true);
+			currentTextY += 10;
+		}
+
+		// 3. Frase Dinâmica do JOI
+		String prompt = joi.getCurrentPrompt();
+		List<String> lines = font.splitString(prompt, hudW - 12);
+		for (String line : lines) {
+			font.drawString(event.getMatrixStack(), line, drawX + 6, currentTextY, 0xFFFFFFFF, true);
+			currentTextY += 9;
+		}
+	}
+
+	public JoiManager.NutResult recordNut(String note) {
+		JoiManager joi = getJoiManager();
+		JoiManager.NutResult result = joi.recordNut(this.currentMetadata, note);
+
+		if (this.enableWebhook.getValue() && this.webhookOnNut.getValue()) {
+			DiscordWebhookSender.sendNutEvent(this.webhookUrl.getValue(), result, this.currentMetadata, joi.getStats(), this.debugMode.getValue());
+		}
+
+		return result;
+	}
+
+	public void recordEdge() {
+		JoiManager joi = getJoiManager();
+		joi.recordEdge();
+
+		if (this.enableWebhook.getValue() && this.webhookOnEdge.getValue()) {
+			DiscordWebhookSender.sendEdgeEvent(this.webhookUrl.getValue(), joi.getCurrentSessionEdges(), joi.getStats().totalEdges, joi.getSessionElapsedSeconds(), this.debugMode.getValue());
+		}
+	}
+
+	public void resetJoiStats() {
+		getJoiManager().resetStats();
+	}
+
+	public boolean isJoiEnabled() {
+		return this.enableJoi.getValue();
+	}
+
+	public void setJoiEnabled(boolean enabled) {
+		this.enableJoi.setValue(enabled);
+		if (enabled) {
+			getJoiManager().startSession();
+		}
+	}
+
+	public void setJoiStyle(JoiManager.JoiStyle style) {
+		this.joiStyle.setValue(style);
+	}
+
+	public JoiManager.JoiStyle getJoiStyle() {
+		return this.joiStyle.getValue();
 	}
 
 	private void clearTextures() {
@@ -431,7 +575,7 @@ public class AnimePicsModule extends ToggleableModule {
 		testMeta.author = "AnimePics Bot";
 		testMeta.rating = "Explicit / NSFW Test";
 		testMeta.postUrl = "https://github.com";
-		testMeta.tags = List.of("test", "nsfw", "webhook", "rusherhack", "ssl_fix");
+		testMeta.tags = List.of("test", "nsfw", "webhook", "rusherhack", "ssl_fix", "joi_companion");
 		DiscordWebhookSender.send(this.webhookUrl.getValue().trim(), testMeta, true);
 	}
 
@@ -510,6 +654,10 @@ public class AnimePicsModule extends ToggleableModule {
 
 	public void setDebugMode(boolean debug) {
 		this.debugMode.setValue(debug);
+	}
+
+	public ImageMetadata getCurrentMetadata() {
+		return this.currentMetadata;
 	}
 
 	private void loadImage() {
@@ -895,7 +1043,6 @@ public class AnimePicsModule extends ToggleableModule {
 				if (!el.isJsonObject()) continue;
 				JsonObject p = el.getAsJsonObject();
 				if (filterStrictNsfw) {
-					// Quando StrictNSFW está ativo, aceita ESTRITAMENTE explicit ("e")
 					if (p.has("rating")) {
 						String r = p.get("rating").getAsString();
 						if (!r.equalsIgnoreCase("e") && !r.equalsIgnoreCase("explicit")) {
@@ -1020,7 +1167,7 @@ public class AnimePicsModule extends ToggleableModule {
 
 	private static HttpURLConnection open(String urlString, String userAgent) throws Exception {
 		HttpURLConnection conn = (HttpURLConnection) URI.create(urlString).toURL().openConnection();
-		SSLHelper.configure(conn); // Previne PKIX path validation failed em qualquer JRE
+		SSLHelper.configure(conn);
 		conn.setRequestProperty("User-Agent", userAgent);
 		conn.setRequestProperty("Accept", "application/json, image/*, */*");
 		conn.setConnectTimeout(10000);

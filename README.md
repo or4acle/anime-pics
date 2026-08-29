@@ -1,60 +1,90 @@
-# AnimePics (RusherHack Plugin)
+# AnimePics + JOI Companion (RusherHack Plugin)
 
-Plugin para RusherHack baseado no módulo `AnimePics`: overlay 2D no HUD exibindo imagens e GIFs de anime NSFW de diversas fontes, com pesquisa de tags personalizadas, envio automático para Webhooks do Discord, modo debug com diagnósticos em tempo real e bypass automático de certificados SSL.
+Plugin para RusherHack 1.21.1 com overlay 2D no HUD exibindo imagens e GIFs NSFW de diversas fontes, com **JOI (Jerk Off Incentive) interativo em tempo real**, metrônomo de ritmo, contador e histórico de sessões/nuts/edges com persistência local, sistema de avaliação por pontuação/rank e integração com Webhooks do Discord.
 
 ---
 
-## ✨ Principais Recursos e Correções
+## ✨ Principais Recursos
 
-### 🛡️ Correção de Certificados SSL (PKIX Path Validator Fix)
-- Implementado o utilitário `SSLHelper` que bypassa problemas de validação de certificados SSL/TLS da JVM no Windows (como erros `PKIX path validation failed: java.security.cert.CertPathValidatorException`).
-- Garante que os Webhooks do Discord e o download de imagens de todos os boorus e CDNs funcionem 100% sem erros de rede.
+### 🎭 Modo JOI (Jerk Off Incentive) e HUD Dinâmico
+- **HUD Elegante no Minecraft**: Exibe textos de incentivo dinâmicos, metrônomo de ritmo para controle de velocidade e badges de status logo abaixo da arte.
+- **6 Estilos de Personalidade (`.ap style <estilo>`)**:
+  - `Humiliation` (ou `zueira` / `roast`): Frases cômicas e humilhantes de zueira ("Look at you stroking to 2D pixels in Minecraft kkkk", "Mãos pra cima seu viciado", etc.).
+  - `Gentle`: Focado em ritmo lento, apreciação dos detalhes e respiração suave.
+  - `Strict`: Comandos de obediência rígida, proibição de acelerar e foco absoluto.
+  - `Hardcore`: Ritmo acelerado, estímulos intensos e foco no clímax.
+  - `Edging`: Foco em controle de borda, comandos de pausa (Hands-Off) e acúmulo de sensibilidade.
+  - `Dynamic`: Alterna inteligentemente entre os estilos com base no tempo de sessão.
+- **Metrônomo Visual de Ritmo**:
+  - `Slow & Steady` (40 BPM)
+  - `Moderate Pace` (75 BPM)
+  - `Intense Speed` (120 BPM)
+  - `Full Speed Frenzy` (160 BPM)
+  - `HOLD & EDGE!` (Pausa total / mãos fora)
+  - `Hands Free! Look Only`
 
-### 🐞 Modo Debug (`DebugMode` / `.ap debug on`)
-- **Diagnóstico em Tempo Real**: Exibe no console do MultiMC/Minecraft todos os detalhes das requisições (URL completa, código de resposta HTTP, tags aplicadas, metadados do post, autor, resolução, tamanho em bytes e eventuais erros com stacktrace).
-- Permite diagnosticar e monitorar facilmente o fluxo de imagens e o envio para o Discord.
+---
+
+### 📈 Rastreador de Estatísticas & Sistema de Pontuação / Ranks
+As estatísticas são salvas automaticamente em `.minecraft/rusherhack/animepics/joi_stats.json`:
+- **Total de Nuts** acumulados.
+- **Total de Edges** realizados.
+- **Duração da Sessão** atual e tempo total acumulado.
+- **Recordes Pessoais**: Sessão mais rápida e sessão mais longa.
+- **Avaliação de Desempenho (Ranks)**:
+  - ⚡ **Rank C** (`Quickshot / Instant Release`): < 2 minutos.
+  - 🔥 **Rank B** (`Rapid Fire`): 2 a 6 minutos.
+  - 🎯 **Rank A** (`Sweet Spot` ou `Controlled Spark`): 6 a 15 minutos (ou com edges múltiplos).
+  - 💎 **Rank S** (`Iron Will` ou `Edge Connoisseur`): 15 a 30 minutos com alta resistência.
+  - 👑 **Rank SS** (`Stamina Overlord`): 30 a 45 minutos com múltiplos edges.
+  - 🌌 **Rank SSS** (`Ascended Transcendence`): 45+ minutos de controle supremo.
+
+---
+
+### 📡 Webhooks do Discord para Eventos e Marcos
+- **Marcos de Clímax (`.ap nut [nota]`)**: Envia um embed especial para o Discord com a avaliação/rank, tempo de sessão, imagem que provocou o clímax, total de nuts, contagem de edges e notas do jogador.
+- **Marcos de Edge (`.ap edge`)**: Registra e notifica edges e tempo acumulado.
+- **Feed NSFW Contínuo**: Envia cada arte nova com miniatura, autor, resolução, tags e link original.
+
+---
 
 ### 🔞 100% Focado em Conteúdo NSFW (`StrictNSFW`)
-- **Filtro Estrito Ativo**: Descarta automaticamente resultados SFW/Safe e aceita apenas `rating:explicit` (`rating:e`).
-- **Injeção de Tags 100% Explícitas**: Caso nenhuma tag seja informada na pesquisa, injeta tags adultas explícitas (`nude`, `nipples`, `pussy`, `sex`, `fellatio`, `cunnilingus`, `masturbation`, `paizuri`, `cum`, `creampie`, `uncensored`, `breasts`, etc.) para garantir artes 100% NSFW.
+- Descarta automaticamente resultados SFW/Safe e aceita apenas `rating:explicit` (`rating:e`).
+- Injeta automaticamente tags adultas explícitas quando não houver termos de busca manuais.
 
-### 📡 Discord Webhook Integrado com Teste Imediato
-- Envia automaticamente cards completos com miniatura da arte, link do post original, autor, resolução e tags.
-- Botão **`TestWebhookNow`** no menu do RusherHack (ClickGUI) e comando **`.ap testwebhook`** para testar a transmissão imediatamente.
+---
 
-### ⌨️ Comandos Rápidos (`.ap`)
-
-O comando principal do plugin agora utiliza o prefixo **`.ap`** (evitando conflito com o comando de configurações nativo do RusherHack):
+## ⌨️ Lista Completa de Comandos (`.ap`)
 
 | Comando | Descrição |
 |---|---|
-| `.ap` | Exibe o status atual, fonte ativa, tags e status do webhook. |
+| `.ap` | Exibe o resumo do status atual (fonte, JOI, estatísticas da sessão). |
+| `.ap nut [nota]` | Registra um clímax, calcula score/rank, salva estatísticas e envia embed para o Discord. |
+| `.ap edge` | Registra um edge na sessão atual e inicia cooldown. |
+| `.ap stats` | Exibe no chat todas as suas estatísticas, recordes e médias acumuladas. |
+| `.ap resetstats` | Reseta todo o histórico e estatísticas salvas. |
+| `.ap joi <on/off>` | Ativa ou desativa o modo JOI no HUD. |
+| `.ap style <gentle/strict/hardcore/edging/dynamic>` | Altera o estilo do JOI. |
 | `.ap next` | Carrega a próxima imagem/GIF imediatamente. |
-| `.ap testwebhook` | Envia um card de teste para verificar seu canal do Discord. |
-| `.ap debug on/off` | Ativa ou desativa o modo debug com logs detalhados no console. |
-| `.ap strict on/off` | Ativa ou desativa o filtro NSFW estrito. |
-| `.ap webhook <url>` | Configura a URL do Webhook do Discord e ativa o envio. |
+| `.ap testwebhook` | Envia uma mensagem de teste para o Discord Webhook configurado. |
+| `.ap webhook <url>` | Configura a URL do Webhook do Discord. |
+| `.ap debug <on/off>` | Ativa o modo de logs detalhados no console do MultiMC. |
+| `.ap strict <on/off>` | Ativa/desativa o filtro estrito de NSFW. |
 | `.ap source <fonte>` | Troca a fonte (`YandeRE`, `Konachan`, `AIBooru`, `PurrBot`, `E621`, `NekosLife`, `LocalFolder`). |
 | `.ap yande <tags>` | Define tags de pesquisa para o Yande.re e recarrega. |
 | `.ap konachan <tags>` | Define tags para o Konachan e recarrega. |
 | `.ap aibooru <tags>` | Define tags para o AIBooru e recarrega. |
 | `.ap e621 <tags>` | Define tags para o E621 e recarrega. |
 | `.ap purr <tag>` | Define a categoria de GIF do PurrBot (`fuck`, `blowjob`, `cum`, `anal`, etc.). |
-| `.ap search <tags>` | Pesquisa tags na fonte atualmente selecionada. |
+| `.ap search <tags>` | Pesquisa tags na fonte ativa. |
 | `.ap clear` | Limpa todas as tags de busca. |
 
 ---
 
 ## 🔨 Como Compilar
 
-Requer **JDK 21**. No prompt de comando na pasta do projeto:
+Requer **JDK 21**. Execute:
 
-**Windows:**
-```powershell
-.\gradlew.bat build
-```
-
-**Linux / macOS:**
 ```bash
 ./gradlew build
 ```
@@ -69,5 +99,5 @@ build/libs/AnimePics-1.0.0.jar
 ## 💾 Instalação no Minecraft / MultiMC
 
 1. Copie o arquivo `AnimePics-1.0.0.jar` da pasta `build/libs/` para `.minecraft/rusherhack/plugins/`.
-2. Verifique se o argumento `-Drusherhack.enablePlugins=true` está configurado nas configurações de Java da instância do MultiMC.
+2. Certifique-se de que `-Drusherhack.enablePlugins=true` está presente nas configurações Java do MultiMC.
 3. Inicie o jogo (Minecraft 1.21.1 com Fabric).
