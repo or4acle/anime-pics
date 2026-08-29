@@ -42,8 +42,8 @@ public class AnimePicsModule extends ToggleableModule {
 	);
 
 	private static final List<String> WAIFU_CYCLE_LIST = Arrays.asList(
-			"waifu", "maid", "uniform", "genshin impact", "raiden shogun",
-			"marin kitagawa", "mori calliope", "kamisato ayaka",
+			"waifu", "maid", "uniform", "genshin-impact", "raiden-shogun",
+			"marin-kitagawa", "mori-calliope", "kamisato-ayaka",
 			"ero", "ecchi", "oppai", "hentai", "milf", "ass", "paizuri", "oral"
 	);
 
@@ -273,15 +273,14 @@ public class AnimePicsModule extends ToggleableModule {
 				case WaifuIM -> {
 					String tag = this.cycleWaifu.getValue()
 							? WAIFU_CYCLE_LIST.get(this.waifuCycleIndex)
-							: this.waifuTag.getValue().name().replace('_', ' ');
+							: this.waifuTag.getValue().name().replace('_', '-');
 					if (this.cycleWaifu.getValue()) {
 						this.waifuCycleIndex = (this.waifuCycleIndex + 1) % WAIFU_CYCLE_LIST.size();
 					}
 
 					String nsfwParam = this.nsfwMode.getValue().paramValue;
-					String wUrl = "https://api.waifu.im/search?"
-							+ "included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8)
-							+ "&limit=20";
+					String wUrl = "https://api.waifu.im/images?"
+							+ "included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8);
 					if (!"All".equalsIgnoreCase(nsfwParam)) {
 						wUrl += "&is_nsfw=" + nsfwParam;
 					}
@@ -293,10 +292,7 @@ public class AnimePicsModule extends ToggleableModule {
 					}
 
 					JsonObject wRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
-					JsonArray items = wRes.getAsJsonArray("images");
-					if (items == null || items.size() == 0) {
-						items = wRes.getAsJsonArray("items");
-					}
+					JsonArray items = wRes.has("items") ? wRes.getAsJsonArray("items") : wRes.getAsJsonArray("images");
 					if (items == null || items.size() == 0) {
 						return null;
 					}
@@ -343,7 +339,8 @@ public class AnimePicsModule extends ToggleableModule {
 
 	private static HttpURLConnection open(String urlString) throws Exception {
 		HttpURLConnection conn = (HttpURLConnection) URI.create(urlString).toURL().openConnection();
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0");
+		conn.setRequestProperty("Accept", "application/json, image/*, */*");
 		conn.setConnectTimeout(10000);
 		conn.setReadTimeout(15000);
 		return conn;
