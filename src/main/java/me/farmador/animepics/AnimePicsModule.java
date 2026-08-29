@@ -33,6 +33,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -87,6 +88,16 @@ public class AnimePicsModule extends ToggleableModule {
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
 	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 150, 2, 500);
 
+	// Rastreamento para recarregamento instantâneo
+	private Source lastSource = null;
+	private String lastYandeTags = null;
+	private BooruRating lastYandeRating = null;
+	private String lastKonachanTags = null;
+	private BooruRating lastKonachanRating = null;
+	private String lastWaifuTag = null;
+	private WaifuNsfwTag lastWaifuEnumTag = null;
+	private PurrBotNsfwTag lastPurrTag = null;
+
 	// Estado Interno
 	private final AtomicBoolean locked = new AtomicBoolean(false);
 	private boolean empty = true;
@@ -123,14 +134,6 @@ public class AnimePicsModule extends ToggleableModule {
 		this.waifuTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 		this.cycleWaifu.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 
-		// Recarregar imediatamente quando o player alterar tags de pesquisa ou fontes
-		this.source.onChange(() -> triggerReload());
-		this.yandeSearchTags.onChange(() -> triggerReload());
-		this.konachanSearchTags.onChange(() -> triggerReload());
-		this.waifuCustomTag.onChange(() -> triggerReload());
-		this.purrbotNsfwTag.onChange(() -> triggerReload());
-		this.waifuTag.onChange(() -> triggerReload());
-
 		this.registerSettings(
 				this.source,
 				// Yande.re Tag Search & Ratings
@@ -162,21 +165,28 @@ public class AnimePicsModule extends ToggleableModule {
 		);
 	}
 
-	private void triggerReload() {
-		this.ticks = 0;
-		this.loadImage();
-	}
-
 	@Override
 	public void onEnable() {
 		this.empty = true;
 		this.ticks = 0;
+		this.initTrackedValues();
 		this.loadImage();
 	}
 
 	@Override
 	public void onDisable() {
 		this.clearTextures();
+	}
+
+	private void initTrackedValues() {
+		this.lastSource = this.source.getValue();
+		this.lastYandeTags = this.yandeSearchTags.getValue();
+		this.lastYandeRating = this.yandeRating.getValue();
+		this.lastKonachanTags = this.konachanSearchTags.getValue();
+		this.lastKonachanRating = this.konachanRating.getValue();
+		this.lastWaifuTag = this.waifuCustomTag.getValue();
+		this.lastWaifuEnumTag = this.waifuTag.getValue();
+		this.lastPurrTag = this.purrbotNsfwTag.getValue();
 	}
 
 	@Subscribe
@@ -205,6 +215,20 @@ public class AnimePicsModule extends ToggleableModule {
 			if (this.localImageFiles.isEmpty()) {
 				return;
 			}
+		}
+
+		// Detecção de mudança de configurações para recarregamento instantâneo
+		boolean sourceChanged = this.lastSource != this.source.getValue();
+		boolean yandeChanged = this.source.getValue() == Source.YandeRE && (!Objects.equals(this.lastYandeTags, this.yandeSearchTags.getValue()) || this.lastYandeRating != this.yandeRating.getValue());
+		boolean konachanChanged = this.source.getValue() == Source.Konachan && (!Objects.equals(this.lastKonachanTags, this.konachanSearchTags.getValue()) || this.lastKonachanRating != this.konachanRating.getValue());
+		boolean waifuChanged = this.source.getValue() == Source.WaifuIM && (!Objects.equals(this.lastWaifuTag, this.waifuCustomTag.getValue()) || this.lastWaifuEnumTag != this.waifuTag.getValue());
+		boolean purrChanged = this.source.getValue() == Source.PurrBot && (this.lastPurrTag != this.purrbotNsfwTag.getValue());
+
+		if (sourceChanged || yandeChanged || konachanChanged || waifuChanged || purrChanged) {
+			this.initTrackedValues();
+			this.ticks = 0;
+			this.loadImage();
+			return;
 		}
 
 		if (this.pauseRefresh.getValue()) {
@@ -350,7 +374,6 @@ public class AnimePicsModule extends ToggleableModule {
 		if (userTags != null) {
 			String trimmed = userTags.trim();
 			if (!trimmed.isEmpty()) {
-				// Divide por espaços ou vírgulas
 				String[] tokens = trimmed.split("[,\\s]+");
 				for (String token : tokens) {
 					if (!token.isEmpty()) {
@@ -369,7 +392,6 @@ public class AnimePicsModule extends ToggleableModule {
 					String tagQuery = buildBooruTagQuery(this.yandeSearchTags.getValue(), this.yandeRating.getValue().param);
 					int page = this.yandeRandomPage.getValue() ? (this.random.nextInt(35) + 1) : 1;
 
-					// Tenta na página sorteada, se vier vazia tenta na página 1
 					JsonObject chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, page);
 					if (chosen == null && page != 1) {
 						chosen = fetchBooruPost("https://yande.re/post.json", tagQuery, 1);
