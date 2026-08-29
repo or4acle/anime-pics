@@ -32,7 +32,9 @@ public class AnimePicsCommand extends Command {
 		return "AnimePics | Source: " + module.getSource().name() +
 				" | Webhook: " + webhookStatus +
 				" | YandeTags: '" + module.getYandeTags() + "'" +
-				" | KonachanTags: '" + module.getKonachanTags() + "'";
+				" | KonachanTags: '" + module.getKonachanTags() + "'" +
+				" | AIBooruTags: '" + module.getAibooruTags() + "'" +
+				" | E621Tags: '" + module.getE621Tags() + "'";
 	}
 
 	/**
@@ -150,6 +152,38 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
+	 * .animepics aibooru <tags...>
+	 */
+	@CommandExecutor(subCommand = {"aibooru", "ai"})
+	@CommandExecutor.Argument("tags")
+	private String setAibooruTags(String tags) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		module.setSource(AnimePicsModule.Source.AIBooru);
+		module.setAibooruTags(tags);
+		module.reloadNow();
+		return "Set AIBooru tags to: [" + tags + "] and loading...";
+	}
+
+	/**
+	 * .animepics e621 <tags...>
+	 */
+	@CommandExecutor(subCommand = {"e621", "e6"})
+	@CommandExecutor.Argument("tags")
+	private String setE621Tags(String tags) {
+		AnimePicsModule module = getModule();
+		if (module == null) {
+			return "AnimePics module not found!";
+		}
+		module.setSource(AnimePicsModule.Source.E621);
+		module.setE621Tags(tags);
+		module.reloadNow();
+		return "Set E621 tags to: [" + tags + "] and loading...";
+	}
+
+	/**
 	 * .animepics waifu <tag>
 	 */
 	@CommandExecutor(subCommand = {"waifu", "waifuim"})
@@ -188,7 +222,7 @@ public class AnimePicsCommand extends Command {
 	}
 
 	/**
-	 * .animepics search <tags...> -> applies to current booru / yande.re
+	 * .animepics search <tags...> -> applies to current booru / source
 	 */
 	@CommandExecutor(subCommand = "search")
 	@CommandExecutor.Argument("tags")
@@ -199,6 +233,10 @@ public class AnimePicsCommand extends Command {
 		}
 		if (module.getSource() == AnimePicsModule.Source.Konachan) {
 			module.setKonachanTags(tags);
+		} else if (module.getSource() == AnimePicsModule.Source.AIBooru) {
+			module.setAibooruTags(tags);
+		} else if (module.getSource() == AnimePicsModule.Source.E621) {
+			module.setE621Tags(tags);
 		} else if (module.getSource() == AnimePicsModule.Source.WaifuIM) {
 			module.setWaifuTag(tags);
 		} else {
@@ -226,7 +264,7 @@ public class AnimePicsCommand extends Command {
 				return "Switched source to: " + s.name();
 			}
 		}
-		return "Unknown source '" + sourceName + "'. Valid: YandeRE, Konachan, PurrBot, WaifuIM, LocalFolder";
+		return "Unknown source '" + sourceName + "'. Valid: YandeRE, Konachan, AIBooru, PurrBot, WaifuIM, E621, NekosLife, LocalFolder";
 	}
 
 	/**
@@ -240,6 +278,8 @@ public class AnimePicsCommand extends Command {
 		}
 		module.setYandeTags("");
 		module.setKonachanTags("");
+		module.setAibooruTags("");
+		module.setE621Tags("");
 		module.setWaifuTag("");
 		module.reloadNow();
 		return "Cleared all search tags and reloaded!";

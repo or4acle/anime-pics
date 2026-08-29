@@ -7,19 +7,23 @@ import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 final class GifDecoder {
 
+	private static final int MAX_DECODE_DIM = 512;
+
 	private GifDecoder() {
 	}
 
 	static boolean isGif(byte[] bytes) {
-		return bytes.length >= 6 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F';
+		return bytes != null && bytes.length >= 6 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F';
 	}
 
 	static List<AnimePicsModule.RawFrame> decode(byte[] gifBytes, int maxFrames) throws Exception {
@@ -33,7 +37,7 @@ final class GifDecoder {
 		try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(gifBytes))) {
 			reader.setInput(iis, false);
 			int frameCount = reader.getNumImages(true);
-			int limit = Math.min(frameCount, maxFrames);
+			int limit = Math.min(frameCount, Math.max(2, maxFrames));
 
 			int screenW = -1;
 			int screenH = -1;
@@ -50,7 +54,13 @@ final class GifDecoder {
 			BufferedImage canvas = null;
 			BufferedImage restoreSnapshot = null;
 
-			for (int i = 0; i < limit; i++) {
+			// Downsampling if frame count is very high
+			int step = 1;
+			if (frameCount > 80 && maxFrames <= 60) {
+				step = 2;
+			}
+
+			for (int i = 0; i < limit; i += step) {
 				BufferedImage frame = reader.read(i);
 				IIOMetadata metadata = reader.getImageMetadata(i);
 				IIOMetadataNode root = (IIOMetadataNode) metadata.getAsTree("javax_imageio_gif_image_1.0");
@@ -88,7 +98,14 @@ final class GifDecoder {
 				g.drawImage(frame, fx, fy, null);
 				g.dispose();
 
-				frames.add(new AnimePicsModule.RawFrame(copyImage(canvas), Math.max(delayCs * 10, 20)));
+				BufferedImage currentSnapshot = copyImage(canvas);
+				BufferedImage optimized = downscaleIfNeeded(currentSnapshot, MAX_DECODE_DIM);
+
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				ImageIO.write(optimized, "png", baos);
+
+				int delayMs = Math.max(delayCs * 10 * step, 20);
+				frames.add(new AnimePicsModule.RawFrame(baos.toByteArray(), optimized.getWidth(), optimized.getHeight(), delayMs));
 
 				if ("restoreToBackgroundColor".equals(disposal)) {
 					Graphics2D clear = canvas.createGraphics();
@@ -103,6 +120,26 @@ final class GifDecoder {
 			reader.dispose();
 		}
 		return frames;
+	}
+
+	private static BufferedImage downscaleIfNeeded(BufferedImage src, int maxDim) {
+		int w = src.getWidth();
+		int h = src.getHeight();
+		if (w <= maxDim && h <= maxDim) {
+			return src;
+		}
+
+		double scale = Math.min((double) maxDim / w, (double) maxDim / h);
+		int targetW = Math.max(1, (int) (w * scale));
+		int targetH = Math.max(1, (int) (h * scale));
+
+		BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g2 = scaled.createGraphics();
+		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+		g2.drawImage(src, 0, 0, targetW, targetH, null);
+		g2.dispose();
+		return scaled;
 	}
 
 	private static IIOMetadataNode getChildNode(IIOMetadataNode root, String name) {
