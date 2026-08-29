@@ -1,6 +1,7 @@
 package me.farmador.animepics;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.rusherhack.client.api.RusherHackAPI;
@@ -11,6 +12,7 @@ import org.rusherhack.client.api.feature.module.ToggleableModule;
 import org.rusherhack.client.api.render.IRenderer2D;
 import org.rusherhack.client.api.render.graphic.TextureGraphic;
 import org.rusherhack.core.event.subscribe.Subscribe;
+import org.rusherhack.core.notification.NotificationType;
 import org.rusherhack.core.setting.BooleanSetting;
 import org.rusherhack.core.setting.EnumSetting;
 import org.rusherhack.core.setting.NumberSetting;
@@ -21,6 +23,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -36,35 +39,55 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AnimePicsModule extends ToggleableModule {
 
-	private static final List<String> NEKOS_CYCLE_LIST = Arrays.asList(
-			"neko", "waifu", "fox_girl", "hug", "kiss", "meow", "lizard", "goose", "gecg",
-			"avatar", "feed", "cuddle", "woof", "smug", "tickle", "slap", "pat", "wallpaper"
-	);
+	private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0";
 
-	private static final List<String> WAIFU_CYCLE_LIST = Arrays.asList(
-			"waifu", "maid", "uniform", "genshin-impact", "raiden-shogun",
-			"marin-kitagawa", "mori-calliope", "kamisato-ayaka",
+	private static final List<String> WAIFU_NSFW_CYCLE_LIST = Arrays.asList(
 			"ero", "ecchi", "oppai", "hentai", "milf", "ass", "paizuri", "oral"
 	);
 
-	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.WaifuIM);
-	private final EnumSetting<NekosTag> nekosCategory = new EnumSetting<>("NekosCategory", NekosTag.neko);
-	private final BooleanSetting cycleNekos = new BooleanSetting("CycleNekos", true);
-	private final EnumSetting<WaifimTag> waifuTag = new EnumSetting<>("WaifuTag", WaifimTag.waifu);
+	private static final List<String> PURRBOT_NSFW_LIST = Arrays.asList(
+			"fuck", "blowjob", "cum", "anal", "pussylick", "solo", "yaoi", "yuri", "neko"
+	);
+
+	private final Random random = new Random();
+
+	// Fonte Principal (Somente NSFW & LocalFolder)
+	private final EnumSetting<Source> source = new EnumSetting<>("Source", Source.YandeRE);
+
+	// Yande.re Settings
+	private final EnumSetting<BooruRating> yandeRating = new EnumSetting<>("YandeRating", BooruRating.Explicit);
+	private final StringSetting yandeCustomTag = new StringSetting("YandeTag", "");
+	private final BooleanSetting yandeRandomPage = new BooleanSetting("YandeRandomPage", true);
+
+	// Konachan Settings (Somente rating NSFW)
+	private final EnumSetting<BooruRating> konachanRating = new EnumSetting<>("KonachanRating", BooruRating.Explicit);
+	private final StringSetting konachanCustomTag = new StringSetting("KonachanTag", "");
+	private final BooleanSetting konachanRandomPage = new BooleanSetting("KonachanRandomPage", true);
+
+	// PurrBot (GIFs NSFW) Settings
+	private final EnumSetting<PurrBotNsfwTag> purrbotNsfwTag = new EnumSetting<>("PurrNsfwTag", PurrBotNsfwTag.blowjob);
+	private final BooleanSetting cyclePurrbot = new BooleanSetting("CyclePurrBot", true);
+
+	// Waifu.im Settings (Somente tags NSFW)
+	private final EnumSetting<WaifuNsfwTag> waifuTag = new EnumSetting<>("WaifuTag", WaifuNsfwTag.ero);
 	private final BooleanSetting cycleWaifu = new BooleanSetting("CycleWaifu", true);
-	private final EnumSetting<NsfwMode> nsfwMode = new EnumSetting<>("NsfwMode", NsfwMode.All);
-	private final StringSetting safebooruTag = new StringSetting("SafebooruTag", "solo");
 
-	private final NumberSetting<Integer> xPos = new NumberSetting<>("X", 2, 0, 1920);
-	private final NumberSetting<Integer> yPos = new NumberSetting<>("Y", 2, 0, 1080);
-	private final NumberSetting<Integer> imgWidth = new NumberSetting<>("Width", 200, 50, 800);
-	private final NumberSetting<Integer> imgHeight = new NumberSetting<>("Height", 200, 50, 800);
+	// Posição & Tamanho
+	private final NumberSetting<Integer> xPos = new NumberSetting<>("X", 4, 0, 3840);
+	private final NumberSetting<Integer> yPos = new NumberSetting<>("Y", 4, 0, 2160);
+	private final NumberSetting<Integer> imgWidth = new NumberSetting<>("Width", 240, 50, 1200);
+	private final NumberSetting<Integer> imgHeight = new NumberSetting<>("Height", 240, 50, 1200);
 
+	// Atualização e Download Automático
 	private final BooleanSetting pauseRefresh = new BooleanSetting("PauseRefresh", false);
-	private final NumberSetting<Integer> refreshRate = new NumberSetting<>("RefreshRate", 1200, 100, 72000);
+	private final NumberSetting<Integer> delay = new NumberSetting<>("Delay", 600, 60, 12000);
+	private final BooleanSetting autoDownload = new BooleanSetting("AutoDownload", false);
+
+	// GIF Settings
 	private final BooleanSetting animateGifs = new BooleanSetting("AnimateGifs", true);
 	private final NumberSetting<Integer> maxGifFrames = new NumberSetting<>("MaxGifFrames", 150, 2, 500);
 
+	// Estado Interno
 	private final AtomicBoolean locked = new AtomicBoolean(false);
 	private boolean empty = true;
 	private int ticks = 0;
@@ -75,36 +98,55 @@ public class AnimePicsModule extends ToggleableModule {
 	private int gifFrameIndex = 0;
 	private long lastFrameTime = 0;
 
-	private int nekosCycleIndex = 0;
 	private int waifuCycleIndex = 0;
+	private int purrbotCycleIndex = 0;
 
 	private final List<File> localImageFiles = new ArrayList<>();
 	private int localImageIndex = 0;
 
 	public AnimePicsModule() {
-		super("AnimePics", "Displays random anime pictures/GIFs (NSFW compatible)", ModuleCategory.RENDER);
+		super("AnimePics", "Displays random NSFW anime pictures & GIFs on screen", ModuleCategory.RENDER);
 
-		this.nekosCategory.setVisibility(() -> this.source.getValue() == Source.NekosLife);
-		this.cycleNekos.setVisibility(() -> this.source.getValue() == Source.NekosLife);
+		// Visibilidade dinâmica para as fontes
+		this.yandeRating.setVisibility(() -> this.source.getValue() == Source.YandeRE);
+		this.yandeCustomTag.setVisibility(() -> this.source.getValue() == Source.YandeRE);
+		this.yandeRandomPage.setVisibility(() -> this.source.getValue() == Source.YandeRE);
+
+		this.konachanRating.setVisibility(() -> this.source.getValue() == Source.Konachan);
+		this.konachanCustomTag.setVisibility(() -> this.source.getValue() == Source.Konachan);
+		this.konachanRandomPage.setVisibility(() -> this.source.getValue() == Source.Konachan);
+
+		this.purrbotNsfwTag.setVisibility(() -> this.source.getValue() == Source.PurrBot);
+		this.cyclePurrbot.setVisibility(() -> this.source.getValue() == Source.PurrBot);
+
 		this.waifuTag.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
 		this.cycleWaifu.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
-		this.nsfwMode.setVisibility(() -> this.source.getValue() == Source.WaifuIM);
-		this.safebooruTag.setVisibility(() -> this.source.getValue() == Source.Safebooru);
 
 		this.registerSettings(
 				this.source,
-				this.nekosCategory,
-				this.cycleNekos,
+				// Yande.re
+				this.yandeRating,
+				this.yandeCustomTag,
+				this.yandeRandomPage,
+				// Konachan
+				this.konachanRating,
+				this.konachanCustomTag,
+				this.konachanRandomPage,
+				// PurrBot
+				this.purrbotNsfwTag,
+				this.cyclePurrbot,
+				// Waifu.im
 				this.waifuTag,
 				this.cycleWaifu,
-				this.nsfwMode,
-				this.safebooruTag,
+				// Posição & Tamanho
 				this.xPos,
 				this.yPos,
 				this.imgWidth,
 				this.imgHeight,
+				// Atualização & AutoDownload
 				this.pauseRefresh,
-				this.refreshRate,
+				this.delay,
+				this.autoDownload,
 				this.animateGifs,
 				this.maxGifFrames
 		);
@@ -137,10 +179,10 @@ public class AnimePicsModule extends ToggleableModule {
 					this.activeFrames.add(new TextureFrame(graphic, raw.delayMs));
 				}
 			}
-			this.pendingUpload = null;
 			this.empty = this.activeFrames.isEmpty();
 			this.gifFrameIndex = 0;
 			this.lastFrameTime = System.currentTimeMillis();
+			this.pendingUpload = null;
 		}
 
 		if (this.source.getValue() == Source.LocalFolder) {
@@ -155,7 +197,7 @@ public class AnimePicsModule extends ToggleableModule {
 		}
 
 		this.ticks++;
-		if (this.empty || this.ticks >= this.refreshRate.getValue()) {
+		if (this.empty || this.ticks >= this.delay.getValue()) {
 			this.ticks = 0;
 			this.loadImage();
 		}
@@ -178,15 +220,14 @@ public class AnimePicsModule extends ToggleableModule {
 			}
 		}
 
+		double boxX = this.xPos.getValue();
+		double boxY = this.yPos.getValue();
+		double boxW = this.imgWidth.getValue();
+		double boxH = this.imgHeight.getValue();
+
 		IRenderer2D renderer = RusherHackAPI.getRenderer2D();
 		renderer.begin(event.getMatrixStack());
-		renderer.drawGraphicRectangle(
-				currentFrame.graphic,
-				this.xPos.getValue(),
-				this.yPos.getValue(),
-				this.imgWidth.getValue(),
-				this.imgHeight.getValue()
-		);
+		renderer.drawGraphicRectangle(currentFrame.graphic, boxX, boxY, boxW, boxH);
 		renderer.end();
 	}
 
@@ -207,6 +248,31 @@ public class AnimePicsModule extends ToggleableModule {
 		});
 		if (files != null) {
 			this.localImageFiles.addAll(Arrays.asList(files));
+		}
+	}
+
+	private void saveImageLocally(byte[] rawBytes, String urlStr) {
+		try {
+			File downloadsDir = new File(mc.gameDirectory, "rusherhack" + File.separator + "animepics" + File.separator + "downloads");
+			if (!downloadsDir.exists()) {
+				downloadsDir.mkdirs();
+			}
+
+			String ext = ".jpg";
+			if (GifDecoder.isGif(rawBytes)) {
+				ext = ".gif";
+			} else if (urlStr.toLowerCase().endsWith(".png")) {
+				ext = ".png";
+			} else if (urlStr.toLowerCase().endsWith(".jpeg")) {
+				ext = ".jpeg";
+			}
+
+			String fileName = "anime_" + System.currentTimeMillis() + "_" + (random.nextInt(9000) + 1000) + ext;
+			File outFile = new File(downloadsDir, fileName);
+			try (FileOutputStream fos = new FileOutputStream(outFile)) {
+				fos.write(rawBytes);
+			}
+		} catch (Exception ignored) {
 		}
 	}
 
@@ -232,6 +298,9 @@ public class AnimePicsModule extends ToggleableModule {
 					rawBytes = Files.readAllBytes(file.toPath());
 				} else {
 					rawBytes = downloadBytes(urlStr);
+					if (rawBytes != null && rawBytes.length > 0 && this.autoDownload.getValue()) {
+						saveImageLocally(rawBytes, urlStr);
+					}
 				}
 
 				if (rawBytes == null || rawBytes.length == 0) {
@@ -261,69 +330,126 @@ public class AnimePicsModule extends ToggleableModule {
 	private String fetchImageUrl() {
 		try {
 			switch (this.source.getValue()) {
-				case NekosLife -> {
-					String category = this.cycleNekos.getValue()
-							? NEKOS_CYCLE_LIST.get(this.nekosCycleIndex)
-							: this.nekosCategory.getValue().name();
-					if (this.cycleNekos.getValue()) {
-						this.nekosCycleIndex = (this.nekosCycleIndex + 1) % NEKOS_CYCLE_LIST.size();
+				case YandeRE -> {
+					String tags = "";
+					String rVal = this.yandeRating.getValue().param;
+					if (!rVal.isEmpty()) {
+						tags += rVal;
 					}
-					return getJsonUrl("https://nekos.life/api/v2/img/" + category, "url");
-				}
-				case WaifuIM -> {
-					String tag = this.cycleWaifu.getValue()
-							? WAIFU_CYCLE_LIST.get(this.waifuCycleIndex)
-							: this.waifuTag.getValue().name().replace('_', '-');
-					if (this.cycleWaifu.getValue()) {
-						this.waifuCycleIndex = (this.waifuCycleIndex + 1) % WAIFU_CYCLE_LIST.size();
+					String custom = this.yandeCustomTag.getValue().trim();
+					if (!custom.isEmpty()) {
+						if (!tags.isEmpty()) tags += "+";
+						tags += URLEncoder.encode(custom, StandardCharsets.UTF_8);
+					}
+					int page = this.yandeRandomPage.getValue() ? (this.random.nextInt(40) + 1) : 1;
+					String url = "https://yande.re/post.json?limit=25&page=" + page;
+					if (!tags.isEmpty()) {
+						url += "&tags=" + tags;
 					}
 
-					String nsfwParam = this.nsfwMode.getValue().paramValue;
-					String wUrl = "https://api.waifu.im/images?"
-							+ "included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8);
-					if (!"All".equalsIgnoreCase(nsfwParam)) {
-						wUrl += "&is_nsfw=" + nsfwParam;
-					}
-					HttpURLConnection conn = open(wUrl);
-					conn.setRequestProperty("Accept", "application/json");
+					HttpURLConnection conn = open(url);
 					if (conn.getResponseCode() != 200) {
-						this.getLogger().error("Waifu API error: HTTP " + conn.getResponseCode() + " for tag: " + tag);
+						return null;
+					}
+					JsonElement root = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+					if (!root.isJsonArray()) return null;
+					JsonArray posts = root.getAsJsonArray();
+					if (posts.isEmpty()) return null;
+					JsonObject chosen = posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+					if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
+						return chosen.get("sample_url").getAsString();
+					}
+					if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+						return chosen.get("file_url").getAsString();
+					}
+					return null;
+				}
+
+				case Konachan -> {
+					String tags = "";
+					String rVal = this.konachanRating.getValue().param;
+					if (!rVal.isEmpty()) {
+						tags += rVal;
+					}
+					String custom = this.konachanCustomTag.getValue().trim();
+					if (!custom.isEmpty()) {
+						if (!tags.isEmpty()) tags += "+";
+						tags += URLEncoder.encode(custom, StandardCharsets.UTF_8);
+					}
+					int page = this.konachanRandomPage.getValue() ? (this.random.nextInt(40) + 1) : 1;
+					String url = "https://konachan.com/post.json?limit=25&page=" + page;
+					if (!tags.isEmpty()) {
+						url += "&tags=" + tags;
+					}
+
+					HttpURLConnection conn = open(url);
+					if (conn.getResponseCode() != 200) {
+						return null;
+					}
+					JsonElement root = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+					if (!root.isJsonArray()) return null;
+					JsonArray posts = root.getAsJsonArray();
+					if (posts.isEmpty()) return null;
+					JsonObject chosen = posts.get(this.random.nextInt(posts.size())).getAsJsonObject();
+					if (chosen.has("sample_url") && !chosen.get("sample_url").isJsonNull()) {
+						return chosen.get("sample_url").getAsString();
+					}
+					if (chosen.has("file_url") && !chosen.get("file_url").isJsonNull()) {
+						return chosen.get("file_url").getAsString();
+					}
+					return null;
+				}
+
+				case PurrBot -> {
+					String tag;
+					if (this.cyclePurrbot.getValue()) {
+						tag = PURRBOT_NSFW_LIST.get(this.purrbotCycleIndex);
+						this.purrbotCycleIndex = (this.purrbotCycleIndex + 1) % PURRBOT_NSFW_LIST.size();
+					} else {
+						tag = this.purrbotNsfwTag.getValue().name();
+					}
+
+					String url = "https://purrbot.site/api/img/nsfw/" + tag + "/gif";
+					HttpURLConnection conn = open(url);
+					if (conn.getResponseCode() != 200) {
+						return null;
+					}
+					JsonObject pRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
+					if (pRes.has("link") && !pRes.get("link").isJsonNull()) {
+						return pRes.get("link").getAsString();
+					}
+					return null;
+				}
+
+				case WaifuIM -> {
+					String tag = this.cycleWaifu.getValue()
+							? WAIFU_NSFW_CYCLE_LIST.get(this.waifuCycleIndex)
+							: this.waifuTag.getValue().name();
+					if (this.cycleWaifu.getValue()) {
+						this.waifuCycleIndex = (this.waifuCycleIndex + 1) % WAIFU_NSFW_CYCLE_LIST.size();
+					}
+
+					String wUrl = "https://api.waifu.im/images?included_tags=" + URLEncoder.encode(tag, StandardCharsets.UTF_8) + "&is_nsfw=true";
+					HttpURLConnection conn = open(wUrl);
+					if (conn.getResponseCode() != 200) {
 						return null;
 					}
 
 					JsonObject wRes = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
 					JsonArray items = wRes.has("items") ? wRes.getAsJsonArray("items") : wRes.getAsJsonArray("images");
-					if (items == null || items.size() == 0) {
-						return null;
-					}
-					return items.get(new Random().nextInt(items.size())).getAsJsonObject().get("url").getAsString();
-				}
-				case Safebooru -> {
-					String encoded = URLEncoder.encode(this.safebooruTag.getValue(), StandardCharsets.UTF_8);
-					int pid = new Random().nextInt(700);
-					String sUrl = "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&tags="
-							+ encoded + "&limit=10&pid=" + pid;
-					HttpURLConnection sConn = open(sUrl);
-					if (sConn.getResponseCode() != 200) {
-						this.getLogger().error("Safebooru API error: HTTP " + sConn.getResponseCode());
+					if (items == null || items.isEmpty()) {
 						return null;
 					}
 
-					JsonArray sArr = JsonParser.parseReader(new InputStreamReader(sConn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonArray();
-					if (sArr.size() == 0) {
-						return null;
+					JsonObject item = items.get(this.random.nextInt(items.size())).getAsJsonObject();
+					if (item.has("url") && !item.get("url").isJsonNull()) {
+						return item.get("url").getAsString();
 					}
-					JsonObject post = sArr.get(new Random().nextInt(sArr.size())).getAsJsonObject();
-					if (post.has("file_url")) {
-						return post.get("file_url").getAsString();
-					}
-					if (post.has("preview_url")) {
-						return post.get("preview_url").getAsString();
-					}
-					return "https://safebooru.org/images/" + post.get("directory").getAsString() + "/" + post.get("image").getAsString();
+					return null;
 				}
+
 				case LocalFolder -> {
-					return "local://";
+					return "local://image";
 				}
 			}
 		} catch (Exception ignored) {
@@ -331,15 +457,9 @@ public class AnimePicsModule extends ToggleableModule {
 		return null;
 	}
 
-	private String getJsonUrl(String urlString, String key) throws Exception {
-		HttpURLConnection conn = open(urlString);
-		JsonObject response = JsonParser.parseReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)).getAsJsonObject();
-		return response.get(key).getAsString();
-	}
-
 	private static HttpURLConnection open(String urlString) throws Exception {
 		HttpURLConnection conn = (HttpURLConnection) URI.create(urlString).toURL().openConnection();
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0");
+		conn.setRequestProperty("User-Agent", USER_AGENT);
 		conn.setRequestProperty("Accept", "application/json, image/*, */*");
 		conn.setConnectTimeout(10000);
 		conn.setReadTimeout(15000);
@@ -369,28 +489,30 @@ public class AnimePicsModule extends ToggleableModule {
 	}
 
 	public enum Source {
-		NekosLife, WaifuIM, Safebooru, LocalFolder
+		YandeRE,
+		Konachan,
+		PurrBot,
+		WaifuIM,
+		LocalFolder
 	}
 
-	public enum NekosTag {
-		neko, waifu, fox_girl, hug, kiss, meow, gecg, avatar, feed, cuddle, woof, smug, tickle, slap, pat, wallpaper
-	}
+	public enum BooruRating {
+		Explicit("rating:explicit"),
+		Questionable("rating:questionable");
 
-	public enum WaifimTag {
-		waifu, maid, uniform, genshin_impact, raiden_shogun, marin_kitagawa, mori_calliope, kamisato_ayaka,
-		ero, ecchi, oppai, hentai, milf, ass, paizuri, oral
-	}
+		public final String param;
 
-	public enum NsfwMode {
-		All("All"),
-		Only("true"),
-		None("false");
-
-		public final String paramValue;
-
-		NsfwMode(String paramValue) {
-			this.paramValue = paramValue;
+		BooruRating(String param) {
+			this.param = param;
 		}
+	}
+
+	public enum PurrBotNsfwTag {
+		fuck, blowjob, cum, anal, pussylick, solo, yaoi, yuri, neko
+	}
+
+	public enum WaifuNsfwTag {
+		ero, ecchi, oppai, hentai, milf, ass, paizuri, oral
 	}
 
 	static class RawFrame {
