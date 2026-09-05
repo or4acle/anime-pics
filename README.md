@@ -30,6 +30,10 @@ Original idea by oehrasa (Anime-Pics module on Oehrasa-Bookies-Addon)
 - **Clean & Lightweight**:
   - Native 2D rendering using RusherHack's `IRenderer2D`, customizable positions (`X`, `Y`), dimensions (`Width`, `Height`), and refresh delay in game ticks.
 
+ ## Why is this addon on 1.21.1? nobody uses that shi
+
+ cuz it works on pluto's rusher crack 🤑🤑🤑🤑🤑🤑
+
 ## Build Instructions
 
 Requires **JDK 21**. In the project root directory:
